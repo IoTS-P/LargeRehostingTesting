@@ -1,0 +1,89 @@
+{
+  "metadata": {
+    "description": "Stage \u2014 Fuzzware: FuzzwareGateway prepares one fuzzware project per firmware (rebase from firmxray_results.base_address), then fuzzing (FirmXRayOnFuzzware), crash replay (FirmXRayOnFuzzwareReplay) and statistics (FuzzwareStat). Tables: firmxray_on_fuzzware_results, firmxray_on_fuzzware_replay_results, firmxray_on_fuzzware_stat_results, view firmxray_fuzzware_replay_crashes.",
+    "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/03_fuzzware.json@/main > /data/results/logs/03_fuzzware.log 2>&1 &",
+    "constraint": "WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)"
+  },
+  "main": {
+    "username": "akiba",
+    "password": "akiba",
+    "usingInstance": "akiba-instance",
+    "general": {
+      "binariesRoot": "/data/akiba/binaries",
+      "importRoot": "/",
+      "processor": "n/a",
+      "autoAnalysisTimeout": 180,
+      "threads": 32
+    },
+    "withGhidraProject": {
+      "projectRoot": "/data/akiba/ghidra_projects",
+      "name": "00b_analyze",
+      "mode": "fork",
+      "forkTo": "03_fuzzware",
+      "continueLog": "03_fuzzware",
+      "overwriteLog": true,
+      "saveProject": true,
+      "noCreateProgram": false
+    },
+    "sqlSource": {
+      "serverIP": "127.0.0.1",
+      "serverPort": "31777",
+      "useSnapshot": "current",
+      "constraint": "WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)",
+      "disableUpdate": false
+    },
+    "dbImports": [
+      "firmxray_results.base_address"
+    ],
+    "tasks": [
+      {
+        "mainClassName": "org.iotsplab.akiba.process.FuzzwareGateway",
+        "configKey": "@@/FuzzwareGateway",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      },
+      {
+        "mainClassName": "org.iotsplab.akiba.process.FirmXRayOnFuzzware",
+        "configKey": "@@/FirmXRayOnFuzzware",
+        "tableName": "firmxray_on_fuzzware_results",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      },
+      {
+        "mainClassName": "org.iotsplab.akiba.process.FirmXRayOnFuzzwareReplay",
+        "configKey": "@@/FirmXRayOnFuzzwareReplay",
+        "tableName": "firmxray_on_fuzzware_replay_results",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      },
+      {
+        "mainClassName": "org.iotsplab.akiba.process.FuzzwareStat",
+        "configKey": "@@/FuzzwareStat",
+        "tableName": "firmxray_on_fuzzware_stat_results",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      }
+    ]
+  },
+  "FuzzwareGateway": {
+    "cmdPrefix": [
+      "/bin/zsh",
+      "-ic"
+    ],
+    "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
+    "regenerateConfig": true,
+    "projectRoot": "fuzzware_projects",
+    "venv": "fuzzware"
+  },
+  "FirmXRayOnFuzzware": {
+    "maxTimeout": "00:01:00:00",
+    "withGDMA": false
+  },
+  "FirmXRayOnFuzzwareReplay": {
+    "maxThreads": 32
+  },
+  "FuzzwareStat": {
+    "projectRoot": "fuzzware_projects",
+    "rebaseSource": "firmxray_results.base_address"
+  }
+}

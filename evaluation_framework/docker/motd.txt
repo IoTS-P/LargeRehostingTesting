@@ -1,0 +1,21 @@
+
+  LargeRehostingTesting — akiba 3.1.2 pipeline container
+  =====================================================
+
+  framework    /home/akiba/akiba_framework        (bin, lib, modules)
+  db daemon    /home/akiba/akiba_db_daemon        (port 31777, health: /test)
+  instance     akiba-instance   user akiba / password akiba
+
+  tools        /data/tools/{FirmXRay,firmline,fuzzware,hoedur,MultiFuzz,FirmRCA}
+  samples      /data/samples                      (host: ./samples)
+  results      /data/results                      (host: ./results)
+  pipelines    /data/pipelines                    (host: ./pipelines)
+  scripts      /opt/rehosting/scripts             (host: ./scripts)
+
+  typical use (from the host):
+    scripts/status.sh
+    scripts/setup_tools.sh --check
+    scripts/import_samples.sh
+    scripts/run_pipeline.sh --only 01,03
+    scripts/export_results.sh
+

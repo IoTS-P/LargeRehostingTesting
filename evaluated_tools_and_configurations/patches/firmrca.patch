@@ -1,0 +1,778 @@
+diff --git a/fuzzware-emulator/get_afl.sh b/fuzzware-emulator/get_afl.sh
+old mode 100644
+new mode 100755
+diff --git a/fuzzware-emulator/unicorn/build_unicorn.sh b/fuzzware-emulator/unicorn/build_unicorn.sh
+old mode 100644
+new mode 100755
+diff --git a/pomp/autogen.sh b/pomp/autogen.sh
+old mode 100644
+new mode 100755
+diff --git a/pompplusplus/autogen.sh b/pompplusplus/autogen.sh
+old mode 100644
+new mode 100755
+diff --git a/src/autogen.sh b/src/autogen.sh
+old mode 100644
+new mode 100755
+diff --git a/test_c_capnproto/bintrace.capnp.c b/test_c_capnproto/bintrace.capnp.c
+index 667cf32..0af5e73 100644
+--- a/test_c_capnproto/bintrace.capnp.c
++++ b/test_c_capnproto/bintrace.capnp.c
+@@ -1,245 +1,180 @@
+-#include "bintrace.capnp.h"
+-/* AUTO GENERATED - DO NOT EDIT */
+-#ifdef __GNUC__
+-# define capnp_unused __attribute__((unused))
+-# define capnp_use(x) (void) (x);
+-#else
+-# define capnp_unused
+-# define capnp_use(x)
+-#endif
+-
+-
+-TraceEvent_ptr new_TraceEvent(struct capn_segment *s) {
+-	TraceEvent_ptr p;
+-	p.p = capn_new_struct(s, 8, 1);
+-	return p;
+-}
+-TraceEvent_list new_TraceEvent_list(struct capn_segment *s, int len) {
+-	TraceEvent_list p;
+-	p.p = capn_new_list(s, len, 8, 1);
+-	return p;
+-}
+-void read_TraceEvent(struct TraceEvent *s capnp_unused, TraceEvent_ptr p) {
+-	capn_resolve(&p.p);
+-	capnp_use(s);
+-	s->which = (enum TraceEvent_which)(int) capn_read16(p.p, 0);
+-	switch (s->which) {
+-	case TraceEvent_basicBlock:
+-	case TraceEvent_access:
+-	case TraceEvent_dump:
+-	case TraceEvent_crash:
+-		s->crash.p = capn_getp(p.p, 0, 0);
+-		break;
+-	default:
+-		break;
+-	}
+-}
+-void write_TraceEvent(const struct TraceEvent *s capnp_unused, TraceEvent_ptr p) {
+-	capn_resolve(&p.p);
+-	capnp_use(s);
+-	capn_write16(p.p, 0, s->which);
+-	switch (s->which) {
+-	case TraceEvent_basicBlock:
+-	case TraceEvent_access:
+-	case TraceEvent_dump:
+-	case TraceEvent_crash:
+-		capn_setp(p.p, 0, s->crash.p);
+-		break;
+-	default:
+-		break;
+-	}
+-}
+-void get_TraceEvent(struct TraceEvent *s, TraceEvent_list l, int i) {
+-	TraceEvent_ptr p;
+-	p.p = capn_getp(l.p, i, 0);
+-	read_TraceEvent(s, p);
+-}
+-void set_TraceEvent(const struct TraceEvent *s, TraceEvent_list l, int i) {
+-	TraceEvent_ptr p;
+-	p.p = capn_getp(l.p, i, 0);
+-	write_TraceEvent(s, p);
+-}
+-
+-Crash_ptr new_Crash(struct capn_segment *s) {
+-	Crash_ptr p;
+-	p.p = capn_new_struct(s, 8, 1);
+-	return p;
+-}
+-Crash_list new_Crash_list(struct capn_segment *s, int len) {
+-	Crash_list p;
+-	p.p = capn_new_list(s, len, 8, 1);
+-	return p;
+-}
+-void read_Crash(struct Crash *s capnp_unused, Crash_ptr p) {
+-	capn_resolve(&p.p);
+-	capnp_use(s);
+-	s->which = (enum Crash_which)(int) capn_read16(p.p, 0);
+-	switch (s->which) {
+-	case Crash_mem:
+-	case Crash_exe:
+-		s->exe.p = capn_getp(p.p, 0, 0);
+-		break;
+-	default:
+-		break;
+-	}
+-}
+-void write_Crash(const struct Crash *s capnp_unused, Crash_ptr p) {
+-	capn_resolve(&p.p);
+-	capnp_use(s);
+-	capn_write16(p.p, 0, s->which);
+-	switch (s->which) {
+-	case Crash_mem:
+-	case Crash_exe:
+-		capn_setp(p.p, 0, s->exe.p);
+-		break;
+-	default:
+-		break;
+-	}
+-}
+-void get_Crash(struct Crash *s, Crash_list l, int i) {
+-	Crash_ptr p;
+-	p.p = capn_getp(l.p, i, 0);
+-	read_Crash(s, p);
+-}
+-void set_Crash(const struct Crash *s, Crash_list l, int i) {
+-	Crash_ptr p;
+-	p.p = capn_getp(l.p, i, 0);
+-	write_Crash(s, p);
+-}
+-
+-BasicBlock_ptr new_BasicBlock(struct capn_segment *s) {
+-	BasicBlock_ptr p;
+-	p.p = capn_new_struct(s, 8, 0);
+-	return p;
+-}
+-BasicBlock_list new_BasicBlock_list(struct capn_segment *s, int len) {
+-	BasicBlock_list p;
+-	p.p = capn_new_list(s, len, 8, 0);
+-	return p;
+-}
+-void read_BasicBlock(struct BasicBlock *s capnp_unused, BasicBlock_ptr p) {
+-	capn_resolve(&p.p);
+-	capnp_use(s);
+-	s->pc = capn_read32(p.p, 0);
+-	s->lr = capn_read32(p.p, 4);
+-}
+-void write_BasicBlock(const struct BasicBlock *s capnp_unused, BasicBlock_ptr p) {
+-	capn_resolve(&p.p);
+-	capnp_use(s);
+-	capn_write32(p.p, 0, s->pc);
+-	capn_write32(p.p, 4, s->lr);
+-}
+-void get_BasicBlock(struct BasicBlock *s, BasicBlock_list l, int i) {
+-	BasicBlock_ptr p;
+-	p.p = capn_getp(l.p, i, 0);
+-	read_BasicBlock(s, p);
+-}
+-void set_BasicBlock(const struct BasicBlock *s, BasicBlock_list l, int i) {
+-	BasicBlock_ptr p;
+-	p.p = capn_getp(l.p, i, 0);
+-	write_BasicBlock(s, p);
+-}
+-
+-Registers_ptr new_Registers(struct capn_segment *s) {
+-	Registers_ptr p;
+-	p.p = capn_new_struct(s, 72, 0);
+-	return p;
+-}
+-Registers_list new_Registers_list(struct capn_segment *s, int len) {
+-	Registers_list p;
+-	p.p = capn_new_list(s, len, 72, 0);
+-	return p;
+-}
+-void read_Registers(struct Registers *s capnp_unused, Registers_ptr p) {
+-	capn_resolve(&p.p);
+-	capnp_use(s);
+-	s->r0 = capn_read32(p.p, 0);
+-	s->r1 = capn_read32(p.p, 4);
+-	s->r2 = capn_read32(p.p, 8);
+-	s->r3 = capn_read32(p.p, 12);
+-	s->r4 = capn_read32(p.p, 16);
+-	s->r5 = capn_read32(p.p, 20);
+-	s->r6 = capn_read32(p.p, 24);
+-	s->r7 = capn_read32(p.p, 28);
+-	s->r8 = capn_read32(p.p, 32);
+-	s->r9 = capn_read32(p.p, 36);
+-	s->r10 = capn_read32(p.p, 40);
+-	s->r11 = capn_read32(p.p, 44);
+-	s->r12 = capn_read32(p.p, 48);
+-	s->lr = capn_read32(p.p, 52);
+-	s->pc = capn_read32(p.p, 56);
+-	s->sp = capn_read32(p.p, 60);
+-	s->xpsr = capn_read32(p.p, 64);
+-}
+-void write_Registers(const struct Registers *s capnp_unused, Registers_ptr p) {
+-	capn_resolve(&p.p);
+-	capnp_use(s);
+-	capn_write32(p.p, 0, s->r0);
+-	capn_write32(p.p, 4, s->r1);
+-	capn_write32(p.p, 8, s->r2);
+-	capn_write32(p.p, 12, s->r3);
+-	capn_write32(p.p, 16, s->r4);
+-	capn_write32(p.p, 20, s->r5);
+-	capn_write32(p.p, 24, s->r6);
+-	capn_write32(p.p, 28, s->r7);
+-	capn_write32(p.p, 32, s->r8);
+-	capn_write32(p.p, 36, s->r9);
+-	capn_write32(p.p, 40, s->r10);
+-	capn_write32(p.p, 44, s->r11);
+-	capn_write32(p.p, 48, s->r12);
+-	capn_write32(p.p, 52, s->lr);
+-	capn_write32(p.p, 56, s->pc);
+-	capn_write32(p.p, 60, s->sp);
+-	capn_write32(p.p, 64, s->xpsr);
+-}
+-void get_Registers(struct Registers *s, Registers_list l, int i) {
+-	Registers_ptr p;
+-	p.p = capn_getp(l.p, i, 0);
+-	read_Registers(s, p);
+-}
+-void set_Registers(const struct Registers *s, Registers_list l, int i) {
+-	Registers_ptr p;
+-	p.p = capn_getp(l.p, i, 0);
+-	write_Registers(s, p);
+-}
+-
+-Access_ptr new_Access(struct capn_segment *s) {
+-	Access_ptr p;
+-	p.p = capn_new_struct(s, 24, 0);
+-	return p;
+-}
+-Access_list new_Access_list(struct capn_segment *s, int len) {
+-	Access_list p;
+-	p.p = capn_new_list(s, len, 24, 0);
+-	return p;
+-}
+-void read_Access(struct Access *s capnp_unused, Access_ptr p) {
+-	capn_resolve(&p.p);
+-	capnp_use(s);
+-	s->target = (enum AccessTarget)(int) capn_read16(p.p, 0);
+-	s->type = capn_read32(p.p, 4);
+-	s->size = capn_read8(p.p, 2);
+-	s->pc = capn_read32(p.p, 8);
+-	s->address = capn_read32(p.p, 12);
+-	s->value = capn_read32(p.p, 16);
+-}
+-void write_Access(const struct Access *s capnp_unused, Access_ptr p) {
+-	capn_resolve(&p.p);
+-	capnp_use(s);
+-	capn_write16(p.p, 0, (uint16_t) (s->target));
+-	capn_write32(p.p, 4, s->type);
+-	capn_write8(p.p, 2, s->size);
+-	capn_write32(p.p, 8, s->pc);
+-	capn_write32(p.p, 12, s->address);
+-	capn_write32(p.p, 16, s->value);
+-}
+-void get_Access(struct Access *s, Access_list l, int i) {
+-	Access_ptr p;
+-	p.p = capn_getp(l.p, i, 0);
+-	read_Access(s, p);
+-}
+-void set_Access(const struct Access *s, Access_list l, int i) {
+-	Access_ptr p;
+-	p.p = capn_getp(l.p, i, 0);
+-	write_Access(s, p);
+-}
++#include "bintrace.capnp.h"
++/* AUTO GENERATED - DO NOT EDIT */
++#ifdef __GNUC__
++# define capnp_unused __attribute__((unused))
++# define capnp_use(x) (void) (x);
++#else
++# define capnp_unused
++# define capnp_use(x)
++#endif
++
++
++TraceEvent_ptr new_TraceEvent(struct capn_segment *s) {
++	TraceEvent_ptr p;
++	p.p = capn_new_struct(s, 8, 1);
++	return p;
++}
++TraceEvent_list new_TraceEvent_list(struct capn_segment *s, int len) {
++	TraceEvent_list p;
++	p.p = capn_new_list(s, len, 8, 1);
++	return p;
++}
++void read_TraceEvent(struct TraceEvent *s capnp_unused, TraceEvent_ptr p) {
++	capn_resolve(&p.p);
++	capnp_use(s);
++	s->which = (enum TraceEvent_which)(int) capn_read16(p.p, 0);
++	switch (s->which) {
++	case TraceEvent_instruction:
++	case TraceEvent_access:
++	case TraceEvent_crash:
++		s->crash.p = capn_getp(p.p, 0, 0);
++		break;
++	default:
++		break;
++	}
++}
++void write_TraceEvent(const struct TraceEvent *s capnp_unused, TraceEvent_ptr p) {
++	capn_resolve(&p.p);
++	capnp_use(s);
++	capn_write16(p.p, 0, s->which);
++	switch (s->which) {
++	case TraceEvent_instruction:
++	case TraceEvent_access:
++	case TraceEvent_crash:
++		capn_setp(p.p, 0, s->crash.p);
++		break;
++	default:
++		break;
++	}
++}
++void get_TraceEvent(struct TraceEvent *s, TraceEvent_list l, int i) {
++	TraceEvent_ptr p;
++	p.p = capn_getp(l.p, i, 0);
++	read_TraceEvent(s, p);
++}
++void set_TraceEvent(const struct TraceEvent *s, TraceEvent_list l, int i) {
++	TraceEvent_ptr p;
++	p.p = capn_getp(l.p, i, 0);
++	write_TraceEvent(s, p);
++}
++
++Crash_ptr new_Crash(struct capn_segment *s) {
++	Crash_ptr p;
++	p.p = capn_new_struct(s, 8, 1);
++	return p;
++}
++Crash_list new_Crash_list(struct capn_segment *s, int len) {
++	Crash_list p;
++	p.p = capn_new_list(s, len, 8, 1);
++	return p;
++}
++void read_Crash(struct Crash *s capnp_unused, Crash_ptr p) {
++	capn_resolve(&p.p);
++	capnp_use(s);
++	s->which = (enum Crash_which)(int) capn_read16(p.p, 0);
++	switch (s->which) {
++	case Crash_mem:
++	case Crash_exe:
++		s->exe.p = capn_getp(p.p, 0, 0);
++		break;
++	default:
++		break;
++	}
++}
++void write_Crash(const struct Crash *s capnp_unused, Crash_ptr p) {
++	capn_resolve(&p.p);
++	capnp_use(s);
++	capn_write16(p.p, 0, s->which);
++	switch (s->which) {
++	case Crash_mem:
++	case Crash_exe:
++		capn_setp(p.p, 0, s->exe.p);
++		break;
++	default:
++		break;
++	}
++}
++void get_Crash(struct Crash *s, Crash_list l, int i) {
++	Crash_ptr p;
++	p.p = capn_getp(l.p, i, 0);
++	read_Crash(s, p);
++}
++void set_Crash(const struct Crash *s, Crash_list l, int i) {
++	Crash_ptr p;
++	p.p = capn_getp(l.p, i, 0);
++	write_Crash(s, p);
++}
++
++Instruction_ptr new_Instruction(struct capn_segment *s) {
++	Instruction_ptr p;
++	p.p = capn_new_struct(s, 8, 0);
++	return p;
++}
++Instruction_list new_Instruction_list(struct capn_segment *s, int len) {
++	Instruction_list p;
++	p.p = capn_new_list(s, len, 8, 0);
++	return p;
++}
++void read_Instruction(struct Instruction *s capnp_unused, Instruction_ptr p) {
++	capn_resolve(&p.p);
++	capnp_use(s);
++	s->pc = capn_read32(p.p, 0);
++	s->lr = capn_read32(p.p, 4);
++}
++void write_Instruction(const struct Instruction *s capnp_unused, Instruction_ptr p) {
++	capn_resolve(&p.p);
++	capnp_use(s);
++	capn_write32(p.p, 0, s->pc);
++	capn_write32(p.p, 4, s->lr);
++}
++void get_Instruction(struct Instruction *s, Instruction_list l, int i) {
++	Instruction_ptr p;
++	p.p = capn_getp(l.p, i, 0);
++	read_Instruction(s, p);
++}
++void set_Instruction(const struct Instruction *s, Instruction_list l, int i) {
++	Instruction_ptr p;
++	p.p = capn_getp(l.p, i, 0);
++	write_Instruction(s, p);
++}
++
++Access_ptr new_Access(struct capn_segment *s) {
++	Access_ptr p;
++	p.p = capn_new_struct(s, 24, 0);
++	return p;
++}
++Access_list new_Access_list(struct capn_segment *s, int len) {
++	Access_list p;
++	p.p = capn_new_list(s, len, 24, 0);
++	return p;
++}
++void read_Access(struct Access *s capnp_unused, Access_ptr p) {
++	capn_resolve(&p.p);
++	capnp_use(s);
++	s->target = (enum AccessTarget)(int) capn_read16(p.p, 0);
++	s->type = capn_read32(p.p, 4);
++	s->size = capn_read8(p.p, 2);
++	s->pc = capn_read32(p.p, 8);
++	s->address = capn_read32(p.p, 12);
++	s->value = capn_read32(p.p, 16);
++}
++void write_Access(const struct Access *s capnp_unused, Access_ptr p) {
++	capn_resolve(&p.p);
++	capnp_use(s);
++	capn_write16(p.p, 0, (uint16_t) (s->target));
++	capn_write32(p.p, 4, s->type);
++	capn_write8(p.p, 2, s->size);
++	capn_write32(p.p, 8, s->pc);
++	capn_write32(p.p, 12, s->address);
++	capn_write32(p.p, 16, s->value);
++}
++void get_Access(struct Access *s, Access_list l, int i) {
++	Access_ptr p;
++	p.p = capn_getp(l.p, i, 0);
++	read_Access(s, p);
++}
++void set_Access(const struct Access *s, Access_list l, int i) {
++	Access_ptr p;
++	p.p = capn_getp(l.p, i, 0);
++	write_Access(s, p);
++}
+diff --git a/test_c_capnproto/bintrace.capnp.h b/test_c_capnproto/bintrace.capnp.h
+index 3fec2d8..d553458 100644
+--- a/test_c_capnproto/bintrace.capnp.h
++++ b/test_c_capnproto/bintrace.capnp.h
+@@ -1,183 +1,145 @@
+-#ifndef CAPN_DB76BBEF1C3D61B6
+-#define CAPN_DB76BBEF1C3D61B6
+-/* AUTO GENERATED - DO NOT EDIT */
+-#include <capnp_c.h>
+-
+-#if CAPN_VERSION != 1
+-#error "version mismatch between capnp_c.h and generated code"
+-#endif
+-
+-#ifndef capnp_nowarn
+-# ifdef __GNUC__
+-#  define capnp_nowarn __extension__
+-# else
+-#  define capnp_nowarn
+-# endif
+-#endif
+-
+-
+-#ifdef __cplusplus
+-extern "C" {
+-#endif
+-
+-struct TraceEvent;
+-struct Crash;
+-struct BasicBlock;
+-struct Registers;
+-struct Access;
+-
+-typedef struct {capn_ptr p;} TraceEvent_ptr;
+-typedef struct {capn_ptr p;} Crash_ptr;
+-typedef struct {capn_ptr p;} BasicBlock_ptr;
+-typedef struct {capn_ptr p;} Registers_ptr;
+-typedef struct {capn_ptr p;} Access_ptr;
+-
+-typedef struct {capn_ptr p;} TraceEvent_list;
+-typedef struct {capn_ptr p;} Crash_list;
+-typedef struct {capn_ptr p;} BasicBlock_list;
+-typedef struct {capn_ptr p;} Registers_list;
+-typedef struct {capn_ptr p;} Access_list;
+-
+-enum AccessTarget {
+-	AccessTarget_ram = 0,
+-	AccessTarget_mmio = 1,
+-	AccessTarget_stack = 2
+-};
+-enum TraceEvent_which {
+-	TraceEvent_basicBlock = 0,
+-	TraceEvent_access = 1,
+-	TraceEvent_dump = 2,
+-	TraceEvent_crash = 3
+-};
+-
+-struct TraceEvent {
+-	enum TraceEvent_which which;
+-	capnp_nowarn union {
+-		BasicBlock_ptr basicBlock;
+-		Access_ptr access;
+-		Registers_ptr dump;
+-		Crash_ptr crash;
+-	};
+-};
+-
+-static const size_t TraceEvent_word_count = 1;
+-
+-static const size_t TraceEvent_pointer_count = 1;
+-
+-static const size_t TraceEvent_struct_bytes_count = 16;
+-
+-enum Crash_which {
+-	Crash_mem = 0,
+-	Crash_exe = 1
+-};
+-
+-struct Crash {
+-	enum Crash_which which;
+-	capnp_nowarn union {
+-		Access_ptr mem;
+-		BasicBlock_ptr exe;
+-	};
+-};
+-
+-static const size_t Crash_word_count = 1;
+-
+-static const size_t Crash_pointer_count = 1;
+-
+-static const size_t Crash_struct_bytes_count = 16;
+-
+-
+-struct BasicBlock {
+-	uint32_t pc;
+-	uint32_t lr;
+-};
+-
+-static const size_t BasicBlock_word_count = 1;
+-
+-static const size_t BasicBlock_pointer_count = 0;
+-
+-static const size_t BasicBlock_struct_bytes_count = 8;
+-
+-
+-struct Registers {
+-	uint32_t r0;
+-	uint32_t r1;
+-	uint32_t r2;
+-	uint32_t r3;
+-	uint32_t r4;
+-	uint32_t r5;
+-	uint32_t r6;
+-	uint32_t r7;
+-	uint32_t r8;
+-	uint32_t r9;
+-	uint32_t r10;
+-	uint32_t r11;
+-	uint32_t r12;
+-	uint32_t lr;
+-	uint32_t pc;
+-	uint32_t sp;
+-	uint32_t xpsr;
+-};
+-
+-static const size_t Registers_word_count = 9;
+-
+-static const size_t Registers_pointer_count = 0;
+-
+-static const size_t Registers_struct_bytes_count = 72;
+-
+-
+-struct Access {
+-	enum AccessTarget target;
+-	uint32_t type;
+-	uint8_t size;
+-	uint32_t pc;
+-	uint32_t address;
+-	uint32_t value;
+-};
+-
+-static const size_t Access_word_count = 3;
+-
+-static const size_t Access_pointer_count = 0;
+-
+-static const size_t Access_struct_bytes_count = 24;
+-
+-
+-TraceEvent_ptr new_TraceEvent(struct capn_segment*);
+-Crash_ptr new_Crash(struct capn_segment*);
+-BasicBlock_ptr new_BasicBlock(struct capn_segment*);
+-Registers_ptr new_Registers(struct capn_segment*);
+-Access_ptr new_Access(struct capn_segment*);
+-
+-TraceEvent_list new_TraceEvent_list(struct capn_segment*, int len);
+-Crash_list new_Crash_list(struct capn_segment*, int len);
+-BasicBlock_list new_BasicBlock_list(struct capn_segment*, int len);
+-Registers_list new_Registers_list(struct capn_segment*, int len);
+-Access_list new_Access_list(struct capn_segment*, int len);
+-
+-void read_TraceEvent(struct TraceEvent*, TraceEvent_ptr);
+-void read_Crash(struct Crash*, Crash_ptr);
+-void read_BasicBlock(struct BasicBlock*, BasicBlock_ptr);
+-void read_Registers(struct Registers*, Registers_ptr);
+-void read_Access(struct Access*, Access_ptr);
+-
+-void write_TraceEvent(const struct TraceEvent*, TraceEvent_ptr);
+-void write_Crash(const struct Crash*, Crash_ptr);
+-void write_BasicBlock(const struct BasicBlock*, BasicBlock_ptr);
+-void write_Registers(const struct Registers*, Registers_ptr);
+-void write_Access(const struct Access*, Access_ptr);
+-
+-void get_TraceEvent(struct TraceEvent*, TraceEvent_list, int i);
+-void get_Crash(struct Crash*, Crash_list, int i);
+-void get_BasicBlock(struct BasicBlock*, BasicBlock_list, int i);
+-void get_Registers(struct Registers*, Registers_list, int i);
+-void get_Access(struct Access*, Access_list, int i);
+-
+-void set_TraceEvent(const struct TraceEvent*, TraceEvent_list, int i);
+-void set_Crash(const struct Crash*, Crash_list, int i);
+-void set_BasicBlock(const struct BasicBlock*, BasicBlock_list, int i);
+-void set_Registers(const struct Registers*, Registers_list, int i);
+-void set_Access(const struct Access*, Access_list, int i);
+-
+-#ifdef __cplusplus
+-}
+-#endif
+-#endif
++#ifndef CAPN_DB76BBEF1C3D61B6
++#define CAPN_DB76BBEF1C3D61B6
++/* AUTO GENERATED - DO NOT EDIT */
++#include <capnp_c.h>
++
++#if CAPN_VERSION != 1
++#error "version mismatch between capnp_c.h and generated code"
++#endif
++
++#ifndef capnp_nowarn
++# ifdef __GNUC__
++#  define capnp_nowarn __extension__
++# else
++#  define capnp_nowarn
++# endif
++#endif
++
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct TraceEvent;
++struct Crash;
++struct Instruction;
++struct Access;
++
++typedef struct {capn_ptr p;} TraceEvent_ptr;
++typedef struct {capn_ptr p;} Crash_ptr;
++typedef struct {capn_ptr p;} Instruction_ptr;
++typedef struct {capn_ptr p;} Access_ptr;
++
++typedef struct {capn_ptr p;} TraceEvent_list;
++typedef struct {capn_ptr p;} Crash_list;
++typedef struct {capn_ptr p;} Instruction_list;
++typedef struct {capn_ptr p;} Access_list;
++
++enum AccessTarget {
++	AccessTarget_ram = 0,
++	AccessTarget_mmio = 1,
++	AccessTarget_stack = 2
++};
++enum TraceEvent_which {
++	TraceEvent_instruction = 0,
++	TraceEvent_access = 1,
++	TraceEvent_crash = 2
++};
++
++struct TraceEvent {
++	enum TraceEvent_which which;
++	capnp_nowarn union {
++		Instruction_ptr instruction;
++		Access_ptr access;
++		Crash_ptr crash;
++	};
++};
++
++static const size_t TraceEvent_word_count = 1;
++
++static const size_t TraceEvent_pointer_count = 1;
++
++static const size_t TraceEvent_struct_bytes_count = 16;
++
++enum Crash_which {
++	Crash_mem = 0,
++	Crash_exe = 1
++};
++
++struct Crash {
++	enum Crash_which which;
++	capnp_nowarn union {
++		Access_ptr mem;
++		Instruction_ptr exe;
++	};
++};
++
++static const size_t Crash_word_count = 1;
++
++static const size_t Crash_pointer_count = 1;
++
++static const size_t Crash_struct_bytes_count = 16;
++
++
++struct Instruction {
++	uint32_t pc;
++	uint32_t lr;
++};
++
++static const size_t Instruction_word_count = 1;
++
++static const size_t Instruction_pointer_count = 0;
++
++static const size_t Instruction_struct_bytes_count = 8;
++
++
++struct Access {
++	enum AccessTarget target;
++	uint32_t type;
++	uint8_t size;
++	uint32_t pc;
++	uint32_t address;
++	uint32_t value;
++};
++
++static const size_t Access_word_count = 3;
++
++static const size_t Access_pointer_count = 0;
++
++static const size_t Access_struct_bytes_count = 24;
++
++
++TraceEvent_ptr new_TraceEvent(struct capn_segment*);
++Crash_ptr new_Crash(struct capn_segment*);
++Instruction_ptr new_Instruction(struct capn_segment*);
++Access_ptr new_Access(struct capn_segment*);
++
++TraceEvent_list new_TraceEvent_list(struct capn_segment*, int len);
++Crash_list new_Crash_list(struct capn_segment*, int len);
++Instruction_list new_Instruction_list(struct capn_segment*, int len);
++Access_list new_Access_list(struct capn_segment*, int len);
++
++void read_TraceEvent(struct TraceEvent*, TraceEvent_ptr);
++void read_Crash(struct Crash*, Crash_ptr);
++void read_Instruction(struct Instruction*, Instruction_ptr);
++void read_Access(struct Access*, Access_ptr);
++
++void write_TraceEvent(const struct TraceEvent*, TraceEvent_ptr);
++void write_Crash(const struct Crash*, Crash_ptr);
++void write_Instruction(const struct Instruction*, Instruction_ptr);
++void write_Access(const struct Access*, Access_ptr);
++
++void get_TraceEvent(struct TraceEvent*, TraceEvent_list, int i);
++void get_Crash(struct Crash*, Crash_list, int i);
++void get_Instruction(struct Instruction*, Instruction_list, int i);
++void get_Access(struct Access*, Access_list, int i);
++
++void set_TraceEvent(const struct TraceEvent*, TraceEvent_list, int i);
++void set_Crash(const struct Crash*, Crash_list, int i);
++void set_Instruction(const struct Instruction*, Instruction_list, int i);
++void set_Access(const struct Access*, Access_list, int i);
++
++#ifdef __cplusplus
++}
++#endif
++#endif

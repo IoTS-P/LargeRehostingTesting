@@ -1,0 +1,17 @@
+# Build context = the whole package.  The image only needs the framework sources,
+# the docker/ files and the scripts (the Dockerfile copies evaluation_framework/…);
+# everything else - the firmware corpus, the tool checkouts, results, evidence -
+# must not be shipped to the build daemon (~8 GB otherwise).
+evaluation_samples/
+evaluated_tools_and_configurations/
+evaluation_results/
+dataset_identification_and_reconstruction/
+empirical_study/
+.git/
+.gitignore
+.gitmodules
+**/__pycache__/
+**/*.pyc
+*.log
+*.tgz
+*.tar.xz

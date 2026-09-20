@@ -1,0 +1,87 @@
+diff --git a/install_local.sh b/install_local.sh
+index e3717d8..c10c2f0 100755
+--- a/install_local.sh
++++ b/install_local.sh
+@@ -2,16 +2,11 @@
+ VENV_NAME=fuzzware
+ 
+ for i in python3 automake redis-server tmux virtualenvwrapper.sh cmake clang clang++ git unzip arm-none-eabi-objcopy; do
+-
+   T=$(which "$i" 2>/dev/null)
+-
+   if [ "$T" = "" ]; then
+-
+     echo "[-] Error: '$i' not found. It requires an install."
+     exit 1
+-
+   fi
+-
+ done
+ 
+ if [[ ! -e emulator/setup.sh || ! -e pipeline/setup.sh ]]; then
+@@ -32,9 +27,14 @@ source "$(which virtualenvwrapper.sh)"
+     }
+ }
+ 
+-# First run modeling install as this may cause python compatibility issues
++
+ pushd modeling; ./setup.sh || { echo "Could not install modeling, exiting."; popd; exit 4; }; popd
+ 
+-workon $VENV_NAME 2>/dev/null || echo "Creating virtualenv '$VENV_NAME'"; mkvirtualenv -p /usr/bin/python3 $VENV_NAME 1>/dev/null 2>&1 && workon $VENV_NAME
+-pushd emulator; ./setup.sh || { echo "Could not install emulator, exiting. In case python / setuptools seems problematic, consider nuking the '$VENV_NAME' and '$VENV_NAME-modeling' virtualenvs and try again."; popd; exit 2; }; popd
+-pushd pipeline; ./setup.sh || { echo "Could not install pipeline, exiting."; popd; exit 3; }; popd
++workon $VENV_NAME 2>/dev/null || echo "Creating virtualenv '$VENV_NAME'"; mkvirtualenv -p /usr/bin/python3.10 $VENV_NAME 1>/dev/null 2>&1 && workon $VENV_NAME
++
++
++echo "[*] Ensuring setuptools version for core env..."
++pip3 install "setuptools<58.0.0"
++
++pushd emulator; ./setup.sh || { echo "Could not install emulator, exiting."; popd; exit 2; }; popd
++pushd pipeline; ./setup.sh || { echo "Could not install pipeline, exiting."; popd; exit 3; }; popd
+\ No newline at end of file
+diff --git a/modeling/setup.sh b/modeling/setup.sh
+index 24313b3..62b833d 100755
+--- a/modeling/setup.sh
++++ b/modeling/setup.sh
+@@ -2,29 +2,31 @@
+ 
+ [[ ! -z $WORKON_HOME ]] || { echo "[ERROR] WORKON_HOME not set..."; exit 1; }
+ 
+-# install fuzzware with angr instead
+ modeling_venv_name="fuzzware-modeling"
+ echo "[*] Installing modeling component in venv '$modeling_venv_name'"
+ 
+-MODELING_VENV_PYTHON3=${MODELING_VENV_PYTHON3:-/usr/bin/python3}
++MODELING_VENV_PYTHON3=${MODELING_VENV_PYTHON3:-/usr/bin/python3.8}
+ 
+-# check whether installation is supported on local system due to python3 / angr compatibility
+ $MODELING_VENV_PYTHON3 -c 'import sys; assert sys.version_info >= (3,8)' &>/dev/null || {
+     echo "[ERROR] Your python3 version is too low for an installation on your local system."
+-    echo
+-    echo "The version of angr which is used requires Python 3.8+."
+-    echo "As a workaround, you may install a newer version of python3 (>=3.8 should work) and set the MODELING_VENV_PYTHON3 environment variable to its path (currently, '$MODELING_VENV_PYTHON3' is used)."
+     exit 1
+ }
+ 
+ /usr/bin/python3 -m virtualenv --python=$MODELING_VENV_PYTHON3 "$WORKON_HOME/$modeling_venv_name"
+ venv_pip="$WORKON_HOME/$modeling_venv_name/bin/pip"
++
++echo "[*] Locking setuptools for modeling..."
++$venv_pip install "setuptools<58.0.0" || exit 1
++
+ if [ ! -e "$venv_pip" ]; then
+     echo "Creating virtualenv $modeling_venv_name"
+     mkvirtualenv -p $MODELING_VENV_PYTHON3 $modeling_venv_name || exit 1
+ fi
+ 
+-$venv_pip install -U -r requirements.txt || exit 1
+-$venv_pip install -U . || exit 1
++echo "[*] Installing modeling requirements with no-build-isolation..."
++$venv_pip install --no-build-isolation -U -r requirements.txt || exit 1
++
++echo "[*] Installing modeling module with no-build-isolation..."
++$venv_pip install --no-build-isolation -U . || exit 1
+ 
+-exit 0
++exit 0
+\ No newline at end of file

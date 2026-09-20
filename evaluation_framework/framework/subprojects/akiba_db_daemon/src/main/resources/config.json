@@ -1,0 +1,6 @@
+{
+  "consoleLogLevel": "TRACE",
+  "fileLogLevel": "DEBUG",
+  "backupRoot": "/akiba/backups",
+  "instanceRoot": "/akiba/instances"
+}

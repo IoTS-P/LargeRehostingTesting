@@ -1,0 +1,234 @@
+diff --git a/FirmXRay/src/core/BaseAddressSolver.java b/FirmXRay/src/core/BaseAddressSolver.java
+index d5c57ad..4ac4b69 100644
+--- a/FirmXRay/src/core/BaseAddressSolver.java
++++ b/FirmXRay/src/core/BaseAddressSolver.java
+@@ -36,7 +36,6 @@ public class BaseAddressSolver {
+ 
+     public static long getBaseAddressWithConstraint(String programName, String projectName) throws IOException, VersionException, CancelledException,
+             DuplicateNameException, InvalidNameException {
+-
+         try {
+             Path path = Paths.get(Constant.DIRECTORY_NAME);
+             Files.createDirectory(path);
+@@ -68,7 +67,7 @@ public class BaseAddressSolver {
+ 
+         LanguageProvider languageProvider;
+         try {
+-            languageProvider = new SleighLanguageProvider();
++            languageProvider = SleighLanguageProvider.getSleighLanguageProvider();
+         } catch (Exception e) {
+             System.out.println("Unable to build language provider.");
+             return 0;
+@@ -89,7 +88,11 @@ public class BaseAddressSolver {
+ 
+         // Constraint 1: base range
+         BaseConstraints range = getBaseRange(program);
+-
++        for (int i=0; i<range.getLength(); ++i) {
++            long low = range.getConstraint(i).get(0);
++            long high = range.getConstraint(i).get(1);
++            System.out.printf("Base address range %d: [%#x, %#x]\n", i, low, high);
++        }
+ 
+         // find all absolute addresses
+         List<Long> AbsAddrSet = FunctionUtil.findAllImmediateInLDR(program);
+@@ -104,7 +107,8 @@ public class BaseAddressSolver {
+         Address current = program.getMinAddress();
+         List<Long> entry = BaseAddressUtil.getFunctionEntries(program);
+         Collections.sort(entry);
+-
++        System.out.println("Checkpoint 0");
++        System.out.printf("LDR number: %d\n", AbsAddrSet.size());
+ 
+         for (long ab : AbsAddrSet) {
+ 
+@@ -125,6 +129,7 @@ public class BaseAddressSolver {
+                 addScore(scores, candidate);
+             }
+         }
++        System.out.println("Checkpoint 1");
+ 
+ 
+         // Constraint 3: absolute string pointer
+@@ -152,12 +157,14 @@ public class BaseAddressSolver {
+                 addScore(scores, candidate);
+             }
+         }
++        System.out.println("Checkpoint 2");
+ 
+ 
+         // Constraint 4: vector table
+         Map<Address, Long> vec = new HashMap<>();
+         if (!Constant.MCU.equals("TI")) {
+             vec = StringUtil.getVector(program);
++            System.out.printf("Vector number: %d\n", vec.size());
+             //List<Long> e7 = BaseAddressUtil.getE7Address(program);
+             List<Long> branchs = BaseAddressUtil.getBranches(program);
+             branchs.addAll(entry);
+@@ -173,13 +180,14 @@ public class BaseAddressSolver {
+                         System.out.println("const4 gives odd candidate");
+                     addScore(scores, candidate);
+                 }
++                System.out.printf("Key count: %d\n", scores.size());
+             }
+         }
+-
++        System.out.println("Checkpoint 3");
++        System.out.printf("Candidate number before sorting: %d\n", scores.size());
+ 
+         scores = NumUtil.sortByValues(scores, true);
+ 
+-
+         int numAbsAddr = AbsAddrSet.size();
+         int numPrologue = entry.size();
+         int numAbsStr = straddrs.size();
+@@ -203,6 +211,7 @@ public class BaseAddressSolver {
+                 break;
+             }
+         }
++        System.out.println("Checkpoint 4");
+ 
+         return base;
+     }
+@@ -235,6 +244,7 @@ public class BaseAddressSolver {
+         List<Long> upperBound = new ArrayList<>();
+ 
+         long size = program.getMaxAddress().getUnsignedOffset();
++        System.out.printf("Max RAM address: %#x\n", size);
+         long low = 0;
+         long high = 0;
+ 
+diff --git a/FirmXRay/src/main/Main.java b/FirmXRay/src/main/Main.java
+index 11c5378..880e615 100644
+--- a/FirmXRay/src/main/Main.java
++++ b/FirmXRay/src/main/Main.java
+@@ -87,7 +87,7 @@ public class Main {
+         }
+ 
+         // Create a Ghidra project
+-        ghidraProject = GhidraProject.createProject(projectDirectoryName, projectName, true);
++        ghidraProject = GhidraProject.createProject(projectDirectoryName, projectName + "-" + programName.replace("/", "-"), true);
+ 
+         // Load binary file
+         File file = new File(programName);
+@@ -97,7 +97,7 @@ public class Main {
+ 
+         LanguageProvider languageProvider;
+         try {
+-            languageProvider = new SleighLanguageProvider();
++            languageProvider = SleighLanguageProvider.getSleighLanguageProvider();
+         } catch (Exception e) {
+             System.out.println("Unable to build language provider.");
+             return;
+@@ -112,6 +112,7 @@ public class Main {
+         try {
+             getBase(programName, Logger.TAG, projectName);
+         } catch (Exception e) {
++            e.printStackTrace();
+             Logger.printE(e.toString());
+         }
+ 
+@@ -156,7 +157,7 @@ public class Main {
+             mgr.startAnalysis(TimeoutTaskMonitor.timeoutIn(Constant.DISASSEMBLE_TIMEOUT, TimeUnit.SECONDS));
+ 
+             // Marked as analyzed
+-            GhidraProgramUtilities.setAnalyzedFlag(program, true);
++            GhidraProgramUtilities.markProgramAnalyzed(program);
+ 
+ 
+             // Now to do something useful
+@@ -182,10 +183,10 @@ public class Main {
+         // create address mapping
+ 
+         Map<Integer, List<Address>> apis;
+-        if (Constant.MCU.equals("Nordic"))
+-            apis = FunctionUtil.locate_nordic(program);
+-        else
+-            apis = FunctionUtil.locate_TI(program);
++        // if (Constant.MCU.equals("Nordic"))
++        //     apis = FunctionUtil.locate_nordic(program);
++        // else
++        //     apis = FunctionUtil.locate_TI(program);
+ 
+         // solve all STR instructions
+         // enabled when analyzing Nordic firmware because TI ones do not have many dependency on global vars
+@@ -200,41 +201,41 @@ public class Main {
+         result.put("Vendor", Constant.MCU);
+ 
+ 
+-        for (int api: apis.keySet()) {
+-            List<Address> addresses = apis.get(api);
+-            List<ExecutionPath> paths = new ArrayList<>();
++        // for (int api: apis.keySet()) {
++        //     List<Address> addresses = apis.get(api);
++        //     List<ExecutionPath> paths = new ArrayList<>();
+ 
+-            JSONArray jsonArray = new JSONArray();
+-            for (Address add : addresses) {
+-                List<String> targetVarSet = Constant.getInitialTargetVars(api);
++        //     JSONArray jsonArray = new JSONArray();
++        //     for (Address add : addresses) {
++        //         List<String> targetVarSet = Constant.getInitialTargetVars(api);
+ 
+-                paths = ExecutionPathFinder.findAllExecPaths(program, add, targetVarSet);
++        //         paths = ExecutionPathFinder.findAllExecPaths(program, add, targetVarSet);
+ 
+-                if (paths == null) {
+-                    jsonArray.put(new JSONObject()); // put an empty object
+-                    continue;
+-                }
++        //         if (paths == null) {
++        //             jsonArray.put(new JSONObject()); // put an empty object
++        //             continue;
++        //         }
+ 
+-                pathNum += paths.size();
++        //         pathNum += paths.size();
+ 
+-                for (ExecutionPath path : paths) {
+-                    ExecutionEngine engine = new ExecutionEngine(program, path, targetVarSet);
+-                    engine.execute();
+-                    engine.printResult();
++        //         for (ExecutionPath path : paths) {
++        //             ExecutionEngine engine = new ExecutionEngine(program, path, targetVarSet);
++        //             engine.execute();
++        //             engine.printResult();
+ 
+-                    // JSONObject r = engine.outputResult();
+-                    JSONObject r = ResultProcessor.ProcessResult(program, api, engine);
+-                    if (!JSONUtil.contains(jsonArray, r))
+-                        jsonArray.put(r);
+-                }
+-            }
+-            result.put(StringUtil.getAPIName(api), jsonArray);
+-        }
++        //             // JSONObject r = engine.outputResult();
++        //             JSONObject r = ResultProcessor.ProcessResult(program, api, engine);
++        //             if (!JSONUtil.contains(jsonArray, r))
++        //                 jsonArray.put(r);
++        //         }
++        //     }
++        //     result.put(StringUtil.getAPIName(api), jsonArray);
++        // }
+ 
+         endTime = System.currentTimeMillis();
+         long totalTime = endTime - startTime;
+         result.put("Time", totalTime);
+-        result.put("Path", pathNum);
++        // result.put("Path", pathNum);
+         result.put("Size", program.getMaxAddress().getUnsignedOffset());
+ 
+         // finish all apis
+diff --git a/FirmXRay/src/util/AddressUtil.java b/FirmXRay/src/util/AddressUtil.java
+index 1b3f528..766c1c5 100644
+--- a/FirmXRay/src/util/AddressUtil.java
++++ b/FirmXRay/src/util/AddressUtil.java
+@@ -33,7 +33,7 @@ public class AddressUtil {
+         else if (address > program.getMaxAddress().getUnsignedOffset())
+             return null;
+ 
+-        Address newAdd = program.getAddressMap().getImageBase().getNewAddress(address);
++        Address newAdd = program.getImageBase().getNewAddress(address);
+         return newAdd;
+ 
+     }

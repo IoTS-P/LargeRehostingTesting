@@ -1,0 +1,46 @@
+diff --git a/install_local.sh b/install_local.sh
+index 59de921..bb9b796 100755
+--- a/install_local.sh
++++ b/install_local.sh
+@@ -1,5 +1,5 @@
+ #!/bin/bash
+-VENV_NAME=fuzzware
++VENV_NAME=fuzzware_gdma
+ 
+ for i in python3 automake redis-server tmux virtualenvwrapper.sh cmake clang clang++ git unzip arm-none-eabi-objcopy cargo; do
+ 
+@@ -35,6 +35,6 @@ source "$(which virtualenvwrapper.sh)"
+ # First run modeling install as this may cause python compatibility issues
+ pushd modeling; ./setup.sh || { echo "Could not install modeling, exiting."; popd; exit 4; }; popd
+ 
+-workon $VENV_NAME 2>/dev/null || echo "Creating virtualenv '$VENV_NAME'"; mkvirtualenv -p /usr/bin/python3 $VENV_NAME 1>/dev/null 2>&1 && workon $VENV_NAME
++workon $VENV_NAME 2>/dev/null || echo "Creating virtualenv '$VENV_NAME'"; mkvirtualenv -p /usr/bin/python3.10 $VENV_NAME 1>/dev/null 2>&1 && workon $VENV_NAME
+ pushd emulator; ./setup.sh || { echo "Could not install emulator, exiting. In case python / setuptools seems problematic, consider nuking the '$VENV_NAME' and '$VENV_NAME-modeling' virtualenvs and try again."; popd; exit 2; }; popd
+ pushd pipeline; ./setup.sh || { echo "Could not install pipeline, exiting."; popd; exit 3; }; popd
+diff --git a/modeling/setup.sh b/modeling/setup.sh
+index 24313b3..d28db6d 100755
+--- a/modeling/setup.sh
++++ b/modeling/setup.sh
+@@ -6,7 +6,7 @@
+ modeling_venv_name="fuzzware-modeling"
+ echo "[*] Installing modeling component in venv '$modeling_venv_name'"
+ 
+-MODELING_VENV_PYTHON3=${MODELING_VENV_PYTHON3:-/usr/bin/python3}
++MODELING_VENV_PYTHON3=${MODELING_VENV_PYTHON3:-/usr/bin/python3.10}
+ 
+ # check whether installation is supported on local system due to python3 / angr compatibility
+ $MODELING_VENV_PYTHON3 -c 'import sys; assert sys.version_info >= (3,8)' &>/dev/null || {
+@@ -24,7 +24,11 @@ if [ ! -e "$venv_pip" ]; then
+     mkvirtualenv -p $MODELING_VENV_PYTHON3 $modeling_venv_name || exit 1
+ fi
+ 
+-$venv_pip install -U -r requirements.txt || exit 1
+-$venv_pip install -U . || exit 1
++echo "[*] Locking setuptools for modeling..."
++$venv_pip install "setuptools<58.0.0" || exit 1
++
++echo "[*] Installing modeling requirements with no-build-isolation..."
++$venv_pip install --no-build-isolation -U -r requirements.txt || exit 1
++$venv_pip install --no-build-isolation -U . || exit 1
+ 
+ exit 0

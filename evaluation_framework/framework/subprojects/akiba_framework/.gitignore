@@ -1,0 +1,14 @@
+lib
+ghidra_projects
+scripts
+build
+.idea
+
+src/main/scripts/tests
+src/main/resources/configs/*
+!src/main/resources/configs/ghidra_log.xml
+!src/main/resources/configs/import-example.json
+!src/main/resources/configs/log4j2.xml
+
+logs
+modules

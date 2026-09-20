@@ -1,0 +1,74 @@
+{
+  "metadata": {
+    "description": "Stage \u2014 FirmRCA root-cause analysis (first pass): runs the FirmRCA test/classification over the crash inputs that the Fuzzware replay stage produced (view firmxray_fuzzware_replay_crashes, basic_block_cov >= 0.1, one input per (id, pc, lr)). Writes firmrca_results and the view firmrca_classified_results / firmrca_classified_replays, which the second pass consumes.",
+    "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/06_firmrca.json@/main > /data/results/logs/06_firmrca.log 2>&1 &",
+    "constraint": "WHERE id IN (SELECT DISTINCT id FROM (SELECT *, row_number() OVER (PARTITION BY id, pc, lr ORDER BY random()) AS rn FROM firmxray_fuzzware_replay_crashes WHERE basic_block_cov >= 0.1) WHERE rn = 1)"
+  },
+  "main": {
+    "username": "akiba",
+    "password": "akiba",
+    "usingInstance": "akiba-instance",
+    "general": {
+      "binariesRoot": "/data/akiba/binaries",
+      "importRoot": "/",
+      "processor": "n/a",
+      "autoAnalysisTimeout": 180,
+      "threads": 1
+    },
+    "withGhidraProject": {
+      "projectRoot": "/data/akiba/ghidra_projects",
+      "name": "00b_analyze",
+      "mode": "fork",
+      "forkTo": "06_firmrca",
+      "continueLog": "06_firmrca",
+      "overwriteLog": true,
+      "saveProject": true,
+      "noCreateProgram": false
+    },
+    "sqlSource": {
+      "serverIP": "127.0.0.1",
+      "serverPort": "31777",
+      "useSnapshot": "current",
+      "constraint": "WHERE id IN (SELECT DISTINCT id FROM (SELECT *, row_number() OVER (PARTITION BY id, pc, lr ORDER BY random()) AS rn FROM firmxray_fuzzware_replay_crashes WHERE basic_block_cov >= 0.1) WHERE rn = 1)",
+      "disableUpdate": false
+    },
+    "dbImports": [
+      "firmxray_results.base_address"
+    ],
+    "tasks": [
+      {
+        "mainClassName": "org.iotsplab.akiba.process.FuzzwareGateway",
+        "configKey": "@@/FuzzwareGateway",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      },
+      {
+        "mainClassName": "org.iotsplab.akiba.process.FirmRCA",
+        "configKey": "@@/FirmRCA",
+        "tableName": "firmrca_results",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      }
+    ]
+  },
+  "FuzzwareGateway": {
+    "cmdPrefix": [
+      "/bin/zsh",
+      "-ic"
+    ],
+    "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
+    "regenerateConfig": true,
+    "projectRoot": "fuzzware_projects",
+    "venv": "fuzzware"
+  },
+  "FirmRCA": {
+    "firmRCARoot": "/data/tools/FirmRCA",
+    "firmRCAPythonVenvRoot": "/data/tools/FirmRCA/FirmRCA-fuzzware",
+    "baseAddressSource": "firmxray_results.base_address",
+    "classifiedMode": false,
+    "deleteLogOnFinish": true,
+    "deleteAllFilesOnFinish": true,
+    "timeoutForEach": 1800,
+    "maximumInsn": 100000
+  }
+}

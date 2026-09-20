@@ -1,0 +1,44 @@
+{
+  "metadata": {
+    "description": "Smoke test: import the example ELF that ships in the image (/home/akiba/binaries) and run a built-in analysis module (Entropy) against it. Proves that Ghidra headless analysis, module loading and database writing work before any real tool is provisioned.",
+    "startCommand": "./bin/akiba_framework -c /data/pipelines/smoke_test.json@/main"
+  },
+  "main": {
+    "username": "akiba",
+    "password": "akiba",
+    "usingInstance": "akiba-instance",
+    "general": {
+      "binariesRoot": "/home/akiba/binaries",
+      "importRoot": "/home/akiba/binaries",
+      "processor": "n/a",
+      "autoAnalysisTimeout": 180,
+      "threads": 1
+    },
+    "withGhidraProject": {
+      "projectRoot": "/home/akiba/ghidra_projects",
+      "name": "smoke_test",
+      "mode": "new",
+      "forkTo": null,
+      "continueLog": null,
+      "overwriteLog": true,
+      "saveProject": true,
+      "noCreateProgram": false
+    },
+    "sqlSource": {
+      "serverIP": "127.0.0.1",
+      "serverPort": "31777",
+      "useSnapshot": "current",
+      "constraint": "WHERE original_path LIKE '%import_example.elf'",
+      "disableUpdate": false
+    },
+    "tasks": [
+      {
+        "mainClassName": "org.iotsplab.akiba.process.Entropy",
+        "timeout": 600,
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug",
+        "tableName": "example_table"
+      }
+    ]
+  }
+}

@@ -1,0 +1,128 @@
+# Patches — what has to be changed in the tools
+
+Everything here was captured from the working copies inside the container on
+`222.20.126.138` (`/data/tools/<tool>`), where the pipeline was developed and
+evaluated. Those copies are *not* pristine upstream checkouts: they carry small
+fixes that make the tools run on this stack (Ubuntu 24.04, python 3.10/3.11,
+newer setuptools/capstone, no direct internet access at run time, …).
+
+Apply them with `evaluation_framework/scripts/apply_patches.sh` (idempotent), or by hand:
+
+```bash
+git -C "evaluated_tools_and_configurations/tools/<tool>" apply -p1 evaluated_tools_and_configurations/patches/<tool>.patch
+```
+
+## Provenance
+
+| File | Tool / commit it applies to | Captured with |
+|------|-----------------------------|---------------|
+| `firmxray.patch` | `evaluated_tools_and_configurations/tools/RealworldFirmware` @ `4133f1fe` (subtree `FirmXRay/`) | `git diff` of the reference worktree against that commit |
+| `firmline.patch` | `evaluated_tools_and_configurations/tools/firmline` @ `38f2ddb8` | `git diff` |
+| `fuzzware.patch` | `evaluated_tools_and_configurations/tools/fuzzware` @ `e43dfbd3` | `git diff` |
+| `fuzzware.emulator.patch` | `evaluated_tools_and_configurations/tools/fuzzware/emulator` | `git diff --submodule=diff`, submodule prefix stripped |
+| `fuzzware.pipeline.patch` | `evaluated_tools_and_configurations/tools/fuzzware/pipeline` | `git diff --submodule=diff`, submodule prefix stripped |
+| `gdma.patch` | `evaluated_tools_and_configurations/tools/gdma` @ `f5979d0` (fuzzware branch `DMA`) | `git diff` |
+| `hoedur.patch` | `evaluated_tools_and_configurations/tools/hoedur` @ `a021fd06` | `git diff` |
+| `multifuzz.patch` | `evaluated_tools_and_configurations/tools/MultiFuzz` @ `44d0cc5d` | `git diff` |
+| `firmrca.patch` | `evaluated_tools_and_configurations/tools/FirmRCA` @ `357958d0` | `git diff` (binary hunks dropped) |
+
+Submodule pointers that the server had checked out (`bgrep`, `radare2`, `cpu_rec`,
+`binwalk`, `firmxray` inside firmline; `emulator`/`pipeline` inside fuzzware and inside gdma;
+`ghidra` inside MultiFuzz) are pinned by `evaluation_framework/scripts/setup.sh`, not by a patch, because
+`git diff` cannot express a gitlink change as a text hunk.
+
+## What each patch changes and why
+
+### firmline
+* `.gitmodules` — `binwalk` submodule URL points at the in-tree copy (`./binwalk`)
+  instead of `github.com/ReFirmLabs/binwalk`: upstream binwalk is dead, the fork is
+  vendored so `git submodule update` works offline.
+* `file_analyses.py` — replaces the `@timeout(…)` decorator on the radare2 analysis
+  with an explicit watchdog thread that kills the `radare2` child and exits. The
+  decorator kills the *worker process* but leaves the r2 child running, which leaks
+  r2 processes over a large corpus (thousands of firmwares) until the host OOMs.
+
+### fuzzware (vanilla, main branch)
+Captured as three files because two of the changed files live in submodules:
+`fuzzware.patch` (top level), `fuzzware.emulator.patch`, `fuzzware.pipeline.patch`.
+* `mkvirtualenv -p /usr/bin/python3.10` (was `/usr/bin/python3`) and
+  `MODELING_VENV_PYTHON3=/usr/bin/python3.8` — newer python breaks the pinned angr
+  used by the modeling component.
+* `pip install "setuptools<58.0.0"` and `pip install --no-build-isolation` (core env,
+  modeling, emulator, pipeline) — the emulator/angr wheels build against the legacy
+  setuptools API; the modern default (PEP 517 isolation) fails.
+* modelling install reordered so the modeling venv exists before the core venv is reused.
+* `emulator/harness/fuzzware_harness/native/native_hooks.c` — `_exit(-1)` → `exit(-1)` in the
+  discovery child so the failure notification is flushed before the process dies (with `_exit`
+  the parent saw a truncated pipe and reported "Could not notify parent of failure" for the
+  wrong reason).
+* `pipeline/fuzzware_pipeline/__init__.py` — `AFL_SKIP_CPUFREQ` set unconditionally instead of
+  only under `--skip-afl-cpufreq`, so fuzzing does not abort on a cpufreq-less host.
+
+### gdma — fuzzware on the `DMA` branch (`install_local.sh`, `modeling/setup.sh`)
+* `VENV_NAME=fuzzware` → `fuzzware_gdma`: the DMA-branch build must not collide with the
+  vanilla `fuzzware` virtualenv, which the pipeline's fuzzware stages use — the reference server
+  keeps `fuzzware`, `fuzzware-modeling` and `fuzzware_gdma` side by side.
+* `mkvirtualenv -p /usr/bin/python3.10` (was `/usr/bin/python3`) and
+  `MODELING_VENV_PYTHON3=/usr/bin/python3.10` — newer python breaks the pinned angr used by the
+  modeling component.
+* Nothing else: the `emulator` and `pipeline` submodules of the `DMA` commit are already pinned
+  to the DMA commits (`4a5adab…`, `e840db6…`) and carry no local changes, so there are no nested
+  patches for this tool.
+
+### hoedur
+* `qemu-sys/build.rs` — no longer downloads QEMU during `cargo build`; it expects
+  `qemu-sys/qemu-7.1.0.tar.xz` to be present (the build host has no internet) and
+  uses `tar -xJf`, printing which patches it applies.
+* `scripts/fuzz_common.py`, `scripts/fuzz-coverage-list.py`, `scripts/fuzz-plot-data.py`
+  — targets are addressed by their absolute directory instead of
+  `$HOEDUR_TARGETS/arm/<target>`, because the pipeline generates one target directory
+  per firmware under its own path.
+* `hoedur-analyze/src/bin/hoedur-dump-exception.rs` (new file on the server) is not
+  part of the patch; the pipeline only uses `hoedur-fuzz`/`hoedur-analyze`.
+
+### MultiFuzz
+* `hail-fuzz/src/debugging/replay.rs` — the replay trace path becomes configurable
+  through `TRACE_PATH` instead of the hard-coded `trace.txt`, so parallel replays do
+  not overwrite each other. `scripts/setup_tools.sh` builds the `hail-fuzz` targets.
+
+### FirmRCA
+* executable bit on the five `autogen.sh` / build scripts (`pomp`, `pompplusplus`,
+  `src`, `fuzzware-emulator/unicorn`) — they are checked in as 0644 upstream but must
+  be executed by `FirmRCA-fuzzware`'s setup.
+* the regenerated `test_c_capnproto/bintrace.capnp.{c,h}` are *build outputs*: the
+  server regenerated them with the local capnproto and LF endings. They are included
+  because they are tracked files and the diff is deterministic; if your capnproto
+  differs, re-run `test_c_capnproto/autogen.sh` and ignore the churn.
+* `src/lib/libcapnproto.so` and `test_c_capnproto/libcapnproto.so` are rebuilt from
+  `c-capnproto/` by `scripts/setup_tools.sh`; the binary hunks are intentionally not
+  in the patch (a text patch cannot carry them).
+
+### FirmXRay  (evaluated_tools_and_configurations/tools/RealworldFirmware, subtree FirmXRay/)
+
+FirmXRay is not a standalone submodule here: the pipeline runs the copy that ships
+inside MCUSec/RealworldFirmware (the USENIX'24 enhanced FirmXRay), so the
+submodule is RealworldFirmware itself and the patch applies inside the submodule:
+
+```bash
+git -C "evaluated_tools_and_configurations/tools/RealworldFirmware" apply -p1 ../../../evaluated_tools_and_configurations/patches/firmxray.patch
+```
+
+The patch is the diff of the **reference worktree** against the pinned upstream
+commit `4133f1fe`, restricted to sources — `base/`, `logs/` and `output/` are run
+outputs of that worktree, not code changes:
+
+* `src/core/BaseAddressSolver.java`,
+* `src/main/Main.java`,
+* `src/util/AddressUtil.java`.
+
+The pristine variant that also existed on the server (`/data/tools/FirmXRay`, used
+only by the `11_firmxray_original.json` experiment) is deliberately not shipped.
+
+### Note on directory names
+
+The paths in this section are the **reference server's**
+paths, quoted as they were — they are provenance, not the layout of this
+repository's container.  Here the same content lives at `/data/tools/<tool>` for the
+tool checkouts and `/data/akiba` for the akiba work data
+(`binaries`, `ghidra_projects`), see `docker/docker-compose.yml`.

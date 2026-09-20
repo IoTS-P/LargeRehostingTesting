@@ -1,0 +1,37 @@
+[submodule "evaluated_tools_and_configurations/tools/uEmu"]
+	path = evaluated_tools_and_configurations/tools/uEmu
+	url = https://github.com/MCUSec/uEmu
+[submodule "evaluated_tools_and_configurations/tools/p2im"]
+	path = evaluated_tools_and_configurations/tools/p2im
+	url = https://github.com/RiS3-Lab/p2im
+[submodule "evaluated_tools_and_configurations/tools/DICE-DMA-Emulation"]
+	path = evaluated_tools_and_configurations/tools/DICE-DMA-Emulation
+	url = https://github.com/RiS3-Lab/DICE-DMA-Emulation
+[submodule "evaluated_tools_and_configurations/tools/hoedur"]
+	path = evaluated_tools_and_configurations/tools/hoedur
+	url = https://github.com/fuzzware-fuzzer/hoedur
+[submodule "evaluated_tools_and_configurations/tools/MultiFuzz"]
+	path = evaluated_tools_and_configurations/tools/MultiFuzz
+	url = https://github.com/MultiFuzz/MultiFuzz
+[submodule "evaluated_tools_and_configurations/tools/gdma"]
+	path = evaluated_tools_and_configurations/tools/gdma
+	url = https://github.com/fuzzware-fuzzer/fuzzware.git
+	branch = DMA
+[submodule "evaluated_tools_and_configurations/tools/FirmRCA"]
+	path = evaluated_tools_and_configurations/tools/FirmRCA
+	url = https://github.com/NESA-Lab/FirmRCA.git
+[submodule "evaluated_tools_and_configurations/tools/firmline"]
+	path = evaluated_tools_and_configurations/tools/firmline
+	url = https://github.com/LittleNewton/firmline.git
+[submodule "evaluated_tools_and_configurations/tools/RealworldFirmware"]
+	path = evaluated_tools_and_configurations/tools/RealworldFirmware
+	url = https://github.com/MCUSec/RealworldFirmware.git
+[submodule "evaluated_tools_and_configurations/tools/AIM-Interrupt-Modeling"]
+	path = evaluated_tools_and_configurations/tools/AIM-Interrupt-Modeling
+	url = https://github.com/bofeng17/AIM-Interrupt-Modeling
+[submodule "evaluated_tools_and_configurations/tools/aidfuzzer"]
+	path = evaluated_tools_and_configurations/tools/aidfuzzer
+	url = https://github.com/wjqsec/aidfuzzer
+[submodule "evaluated_tools_and_configurations/tools/fuzzware"]
+	path = evaluated_tools_and_configurations/tools/fuzzware
+	url = https://github.com/fuzzware-fuzzer/fuzzware

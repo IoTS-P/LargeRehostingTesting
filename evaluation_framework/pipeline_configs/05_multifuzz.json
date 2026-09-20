@@ -1,0 +1,74 @@
+{
+  "metadata": {
+    "description": "Stage \u2014 MultiFuzz: FuzzwareGateway prepares the per-firmware project (base address from FirmXRay), MultiFuzz runs the fuzzer and replays the crashes. Table: multifuzz_results.",
+    "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/05_multifuzz.json@/main > /data/results/logs/05_multifuzz.log 2>&1 &",
+    "constraint": "WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)"
+  },
+  "main": {
+    "username": "akiba",
+    "password": "akiba",
+    "usingInstance": "akiba-instance",
+    "general": {
+      "binariesRoot": "/data/akiba/binaries",
+      "importRoot": "/",
+      "processor": "n/a",
+      "autoAnalysisTimeout": 180,
+      "threads": 64
+    },
+    "withGhidraProject": {
+      "projectRoot": "/data/akiba/ghidra_projects",
+      "name": "00b_analyze",
+      "mode": "fork",
+      "forkTo": "05_multifuzz",
+      "continueLog": "05_multifuzz",
+      "overwriteLog": true,
+      "saveProject": true,
+      "noCreateProgram": false
+    },
+    "sqlSource": {
+      "serverIP": "127.0.0.1",
+      "serverPort": "31777",
+      "useSnapshot": "current",
+      "constraint": "WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)",
+      "disableUpdate": false
+    },
+    "dbImports": [
+      "firmxray_results.base_address"
+    ],
+    "tasks": [
+      {
+        "mainClassName": "org.iotsplab.akiba.process.FuzzwareGateway",
+        "configKey": "@@/FuzzwareGateway",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      },
+      {
+        "mainClassName": "org.iotsplab.akiba.process.MultiFuzz",
+        "configKey": "@@/MultiFuzz",
+        "tableName": "multifuzz_results",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      }
+    ]
+  },
+  "FuzzwareGateway": {
+    "cmdPrefix": [
+      "/bin/zsh",
+      "-ic"
+    ],
+    "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
+    "regenerateConfig": true,
+    "projectRoot": "multifuzz_projects",
+    "venv": "fuzzware"
+  },
+  "MultiFuzz": {
+    "multifuzzRoot": "/data/tools/MultiFuzz",
+    "cargoPath": "/home/akiba/.cargo/bin/cargo",
+    "runFor": "1h",
+    "baseAddressSource": "firmxray_results.base_address",
+    "ivtStartSource": null,
+    "doFuzz": true,
+    "doReplay": true,
+    "replayThread": 8
+  }
+}

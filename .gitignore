@@ -1,0 +1,126 @@
+# =============================================================================
+# Ignore rules
+#
+# The container bind-mounts several parts of this repository and writes into them
+# while a run is in progress, so most of what a run produces is an intermediate
+# result and stays out of git.  The mounts are:
+#
+#   evaluated_tools_and_configurations/tools/<tool>   ->  /data/tools/<tool>
+#   evaluation_samples/                               ->  /data/samples
+#   evaluation_results/                               ->  /data/results
+#   evaluation_framework/pipeline_configs/                   ->  /data/pipelines         (ro)
+#   evaluation_framework/scripts/                     ->  /opt/rehosting/scripts  (ro)
+#   evaluation_framework/framework/                   ->  /opt/rehosting/framework (ro)
+#
+# From those trees only the published per-stage result tables
+# (evaluation_results/stage_*.csv) and the READMEs are tracked.
+# =============================================================================
+
+# --- sample corpus: hosted on Google Drive, see README.md A.3.5 ---------------
+# Everything in this directory is part of the Google Drive upload: the stripped
+# firmware, the offset maps, the id lists, the recovery script, the corpus
+# scripts and the extracted empirical-study images.  None of it lives in git.
+evaluation_samples/
+
+# --- results the container writes into /data/results --------------------------
+# database dumps (db/), per-stage logs (logs/), generated configs (generated/),
+# exported per-firmware trees (artifacts/) and the export manifest
+evaluation_results/*
+!evaluation_results/README.md
+!evaluation_results/stage_*.csv
+
+# --- evaluation_framework: build products of the framework and the modules ----
+evaluation_framework/framework/build/
+evaluation_framework/framework/dist/
+evaluation_framework/framework/**/.gradle/
+evaluation_framework/framework/**/.kotlin/
+evaluation_framework/framework/lib/ghidra.jar
+evaluation_framework/framework/subprojects/*/lib/ghidra.jar
+evaluation_framework/framework/subprojects/*/build/
+# module JARs of the reference build, fetched by scripts/fetch_reference_modules.sh
+evaluation_framework/framework/prebuilt-modules/
+
+# --- host-side scratch drivers (not part of the published scripts) ------------
+evaluation_framework/scripts/_*.sh
+evaluation_framework/scripts/_*.py
+
+# --- evaluated_tools_and_configurations/tools/<tool> -> /data/tools/<tool> ----
+# The checkouts themselves are submodules pinned to the evaluated commits; what
+# the provisioning steps and the runs leave behind inside them is ignored below.
+
+# FirmXRay (the Firmline tarball also carries a copy of it)
+evaluated_tools_and_configurations/tools/RealworldFirmware/FirmXRay/out/
+evaluated_tools_and_configurations/tools/RealworldFirmware/FirmXRay/lib/ghidra.jar
+
+# Fuzzware and Fuzzware-GDMA: their virtualenvs live in the container's home
+# volume, what lands in the checkout is the emulator build and Python build output
+evaluated_tools_and_configurations/tools/fuzzware/build/
+evaluated_tools_and_configurations/tools/fuzzware/modeling/build/
+evaluated_tools_and_configurations/tools/fuzzware/**/*.egg-info/
+evaluated_tools_and_configurations/tools/fuzzware/**/__pycache__/
+evaluated_tools_and_configurations/tools/gdma/build/
+evaluated_tools_and_configurations/tools/gdma/modeling/build/
+evaluated_tools_and_configurations/tools/gdma/**/*.egg-info/
+evaluated_tools_and_configurations/tools/gdma/**/__pycache__/
+
+# Hoedur: the extracted QEMU source tree and the release build
+evaluated_tools_and_configurations/tools/hoedur/qemu-sys/qemu-7.1.0/
+evaluated_tools_and_configurations/tools/hoedur/qemu-sys/qemu-7.1.0.tar.xz
+evaluated_tools_and_configurations/tools/hoedur/target/
+
+# MultiFuzz
+evaluated_tools_and_configurations/tools/MultiFuzz/target/
+
+# Firmline: its database, the processed firmware and the vendored analyser builds
+evaluated_tools_and_configurations/tools/firmline/fwdb.db
+evaluated_tools_and_configurations/tools/firmline/processed-firmware/
+evaluated_tools_and_configurations/tools/firmline/radare2/config-user.mk
+evaluated_tools_and_configurations/tools/firmline/radare2/libr/config.mk
+evaluated_tools_and_configurations/tools/firmline/radare2/**/*.pc
+evaluated_tools_and_configurations/tools/firmline/radare2/**/plugins.cfg
+
+# FirmRCA: its own fuzzware fork, the capstone/capnproto/pomp builds and the
+# autotools products of the autogen.sh roots (src/, pomp/, pompplusplus/)
+evaluated_tools_and_configurations/tools/FirmRCA/FirmRCA-fuzzware/
+evaluated_tools_and_configurations/tools/FirmRCA/FirmRCA-venv/
+evaluated_tools_and_configurations/tools/FirmRCA/capstone/
+evaluated_tools_and_configurations/tools/FirmRCA/c-capnproto/
+evaluated_tools_and_configurations/tools/FirmRCA/capnproto-c++-1.0.1/
+evaluated_tools_and_configurations/tools/FirmRCA/*/config.status
+evaluated_tools_and_configurations/tools/FirmRCA/*/config.log
+evaluated_tools_and_configurations/tools/FirmRCA/*/configure
+evaluated_tools_and_configurations/tools/FirmRCA/*/aclocal.m4
+evaluated_tools_and_configurations/tools/FirmRCA/*/Makefile
+evaluated_tools_and_configurations/tools/FirmRCA/*/Makefile.in
+evaluated_tools_and_configurations/tools/FirmRCA/*/libtool
+evaluated_tools_and_configurations/tools/FirmRCA/*/stamp-h1
+evaluated_tools_and_configurations/tools/FirmRCA/*/.deps/
+evaluated_tools_and_configurations/tools/FirmRCA/*/.libs/
+evaluated_tools_and_configurations/tools/FirmRCA/*/autom4te.cache/
+evaluated_tools_and_configurations/tools/FirmRCA/*/*/config.status
+evaluated_tools_and_configurations/tools/FirmRCA/*/*/Makefile
+evaluated_tools_and_configurations/tools/FirmRCA/*/*/.deps/
+evaluated_tools_and_configurations/tools/FirmRCA/*/*/.libs/
+evaluated_tools_and_configurations/tools/FirmRCA/*/*/reversenolog
+# placeholder the build needs (src/Makefile.am lists a README the checkout lacks)
+evaluated_tools_and_configurations/tools/FirmRCA/src/README
+
+# --- generic build products (compile/link output only) ------------------------
+*.o
+*.lo
+*.la
+*.a
+*.so
+*.so.*
+*.class
+*.pyc
+*.pyo
+__pycache__/
+.deps/
+.libs/
+autom4te.cache/
+
+# --- misc ---------------------------------------------------------------------
+*.log
+.DS_Store
+._*

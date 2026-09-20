@@ -1,0 +1,118 @@
+diff --git a/common/src/lib.rs b/common/src/lib.rs
+index a5c5f28..8bfcb2e 100644
+--- a/common/src/lib.rs
++++ b/common/src/lib.rs
+@@ -15,5 +15,10 @@ pub use rustc_hash::FxHasher;
+ pub type FxHashMap<K, V> = hashbrown::HashMap<K, V, BuildHasherDefault<rustc_hash::FxHasher>>;
+ pub type FxHashSet<K> = hashbrown::HashSet<K, BuildHasherDefault<rustc_hash::FxHasher>>;
+ 
+-pub const GIT_VERSION: &str = git_version::git_version!();
++// The upstream call is `git_version::git_version!()`, which makes the build fail when
++// `git describe` cannot run.  That happens in this artifact: the tool is a git submodule
++// and its `.git` file carries a gitdir path relative to the *host* layout, which does not
++// resolve under the container's /data/tools mount.  The fallback keeps the build working
++// and only changes the embedded version string.
++pub const GIT_VERSION: &str = git_version::git_version!(fallback = "unknown");
+ pub const CONFIG: &str = include_str!("config.rs");
+diff --git a/qemu-sys/build.rs b/qemu-sys/build.rs
+index 6239778..b60347e 100644
+--- a/qemu-sys/build.rs
++++ b/qemu-sys/build.rs
+@@ -16,35 +16,36 @@ fn main() {
+     let build_dir = out_dir.join("build");
+     let bindings_dir = PathBuf::from(BINDINGS_DIR);
+ 
+-    // get QEMU
++
+     if !qemu_dir.is_dir() {
+-        let qemu_tar = out_dir.join("qemu-7.1.0.tar.xz");
++        let qemu_tar = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("qemu-7.1.0.tar.xz");
+ 
+-        // download QEMU
+-        assert!(Command::new("wget")
+-            .arg("https://download.qemu.org/qemu-7.1.0.tar.xz")
+-            .arg("-O")
+-            .arg(&qemu_tar)
+-            .status()
+-            .expect("QEMU download failed")
+-            .success());
++        if !qemu_tar.exists() {
++            panic!(
++                "\n\n[!] Error: QEMU source archive not found.\n\
++                [!] Please download: https://download.qemu.org/qemu-7.1.0.tar.xz\n\
++                [!] And place it at: {:?}\n\n",
++                qemu_tar
++            );
++        }
++
++        println!("cargo:warning=Using manually uploaded QEMU source: {:?}", qemu_tar);
+ 
+-        // extract QEMU
+         assert!(Command::new("tar")
+             .current_dir(&out_dir)
+-            .arg("-xf")
++            .arg("-xJf")
+             .arg(&qemu_tar)
+             .status()
+             .expect("QEMU extract failed")
+             .success());
+ 
+-        // apply QEMU patches
+         let patches_dir = PathBuf::from(PATCHES_DIR);
+         let patches = [
+             patches_dir.join("hoedur.patch"),
+             patches_dir.join("5cb993ff131fca2abef3ce074a20258fd6fce557.patch"),
+         ];
+         for patch in patches {
++            println!("cargo:warning=Applying patch: {:?}", patch.file_name().unwrap());
+             let file = File::open(patch).expect("Failed to open patch file");
+ 
+             assert!(Command::new("patch")
+@@ -66,4 +67,4 @@ fn main() {
+     let arch = Arch::Arm;
+ 
+     build(&qemu_dir, &build_dir, arch, &bindings_dir);
+-}
++}
+\ No newline at end of file
+diff --git a/scripts/fuzz-coverage-list.py b/scripts/fuzz-coverage-list.py
+index e8ed5d3..b0ff4e0 100755
+--- a/scripts/fuzz-coverage-list.py
++++ b/scripts/fuzz-coverage-list.py
+@@ -77,7 +77,8 @@ def run_coverage_list(runs, no_basic_block_filter, output, config_name, bug_filt
+         else:
+             bb_filter = [
+                 '--valid-basic-blocks',
+-                f'{HOEDUR_TARGETS}/arm/{target}/valid_basic_blocks.txt',
++                # f'{HOEDUR_TARGETS}/arm/{target}/valid_basic_blocks.txt',
++                f'{target}/valid_basic_blocks.txt',
+             ]
+ 
+         # output dirs
+diff --git a/scripts/fuzz-plot-data.py b/scripts/fuzz-plot-data.py
+index 3e6edb4..2d21063 100755
+--- a/scripts/fuzz-plot-data.py
++++ b/scripts/fuzz-plot-data.py
+@@ -106,7 +106,8 @@ def run_plot_data(config_name, output, root, no_basic_block_filter, only_coverag
+         else:
+             bb_filter = [
+                 '--valid-basic-blocks',
+-                f'{HOEDUR_TARGETS}/arm/{target}/valid_basic_blocks.txt',
++                # f'{HOEDUR_TARGETS}/arm/{target}/valid_basic_blocks.txt',
++                f'{target}/valid_basic_blocks.txt'
+             ]
+ 
+         # only coverage plot
+diff --git a/scripts/fuzz_common.py b/scripts/fuzz_common.py
+index 6bc1ffa..56c032c 100755
+--- a/scripts/fuzz_common.py
++++ b/scripts/fuzz_common.py
+@@ -154,7 +154,7 @@ def init_hoedur(corpus_base, target, fuzzer, models, fuzzware, duration, run_id,
+     target_name = target.replace('/', '-')
+ 
+     name = f'TARGET-{target_name}-FUZZER-{fuzzer}-RUN-{run_id:02d}-DURATION-{duration}-MODE{modes}'
+-    target_dir = '{}/{}/{}'.format(HOEDUR_TARGETS, HOEDUR_ARCH, target)
++    target_dir = '{}'.format(target)
+     corpus = corpus_base + '/' + name
+     corpus_tar = f'{corpus}.corpus.tar.zst'
+ 

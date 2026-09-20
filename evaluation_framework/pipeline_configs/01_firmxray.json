@@ -1,0 +1,50 @@
+{
+  "metadata": {
+    "description": "Stage 1 — FirmXRay base-address recognition over every imported raw firmware (the FirmXRay inside MCUSec/RealworldFirmware). Writes firmxray_results (base_address, entry_valid); everything downstream (dbImports: firmxray_results.base_address) consumes that table.",
+    "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/01_firmxray.json@/main > /data/results/logs/01_firmxray.log 2>&1 &",
+    "constraint": "WHERE format = 'Raw Binary'"
+  },
+  "main": {
+    "username": "akiba",
+    "password": "akiba",
+    "usingInstance": "akiba-instance",
+    "general": {
+      "binariesRoot": "/data/akiba/binaries",
+      "importRoot": "/",
+      "processor": "n/a",
+      "autoAnalysisTimeout": 180,
+      "threads": 1
+    },
+    "withGhidraProject": {
+      "projectRoot": "/data/akiba/ghidra_projects",
+      "name": "01_firmxray",
+      "mode": "new",
+      "forkTo": null,
+      "continueLog": null,
+      "overwriteLog": true,
+      "saveProject": true,
+      "noCreateProgram": false
+    },
+    "sqlSource": {
+      "serverIP": "127.0.0.1",
+      "serverPort": "31777",
+      "useSnapshot": "current",
+      "constraint": "WHERE format = 'Raw Binary'",
+      "disableUpdate": false
+    },
+    "tasks": [
+      {
+        "mainClassName": "org.iotsplab.akiba.process.FirmXRay",
+        "configKey": "@@/FirmXRay",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "warn",
+        "tableName": "firmxray_results"
+      }
+    ]
+  },
+  "FirmXRay": {
+    "cmdPrefix": ["/bin/bash", "-c"],
+    "firmxrayRoot": "/data/tools/RealworldFirmware/FirmXRay",
+    "javaBinPath": "/bin/java"
+  }
+}
