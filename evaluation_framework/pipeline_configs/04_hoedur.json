@@ -1,0 +1,92 @@
+{
+  "metadata": {
+    "description": "Stage \u2014 Hoedur: FuzzwareGateway prepares the per-firmware project, HoedurFuzz runs the hoedur fuzzer, HoedurStatistics summarises the run. Tables: hoedur_fuzz_results, hoedur_statistics_results.",
+    "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/04_hoedur.json@/main > /data/results/logs/04_hoedur.log 2>&1 &",
+    "constraint": "WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)"
+  },
+  "main": {
+    "username": "akiba",
+    "password": "akiba",
+    "usingInstance": "akiba-instance",
+    "general": {
+      "binariesRoot": "/data/akiba/binaries",
+      "importRoot": "/",
+      "processor": "n/a",
+      "autoAnalysisTimeout": 180,
+      "threads": 32
+    },
+    "withGhidraProject": {
+      "projectRoot": "/data/akiba/ghidra_projects",
+      "name": "00b_analyze",
+      "mode": "fork",
+      "forkTo": "04_hoedur",
+      "continueLog": "04_hoedur",
+      "overwriteLog": true,
+      "saveProject": true,
+      "noCreateProgram": false
+    },
+    "sqlSource": {
+      "serverIP": "127.0.0.1",
+      "serverPort": "31777",
+      "useSnapshot": "current",
+      "constraint": "WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)",
+      "disableUpdate": false
+    },
+    "dbImports": [
+      "firmxray_results.base_address"
+    ],
+    "tasks": [
+      {
+        "mainClassName": "org.iotsplab.akiba.process.FuzzwareGateway",
+        "configKey": "@@/FuzzwareGateway",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      },
+      {
+        "mainClassName": "org.iotsplab.akiba.process.HoedurFuzz",
+        "configKey": "@@/HoedurFuzz",
+        "tableName": "hoedur_fuzz_results",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      },
+      {
+        "mainClassName": "org.iotsplab.akiba.process.HoedurStatistics",
+        "configKey": "@@/HoedurStatistics",
+        "tableName": "hoedur_statistics_results",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      }
+    ]
+  },
+  "FuzzwareGateway": {
+    "cmdPrefix": [
+      "/bin/zsh",
+      "-ic"
+    ],
+    "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
+    "regenerateConfig": true,
+    "projectRoot": "hoedur_projects",
+    "venv": "fuzzware"
+  },
+  "HoedurFuzz": {
+    "hoedurRoot": "/data/tools/hoedur",
+    "cargoPath": "/home/akiba/.cargo/bin/cargo",
+    "maxTimeoutMinutes": "60m",
+    "crashArchiveRoot": "hoedur_projects",
+    "hoedurLogConfigPath": "/data/tools/hoedur/common/log/debug.yml",
+    "baseAddressSource": "firmxray_results.base_address",
+    "ivtStartSource": "firmxray_results.base_address"
+  },
+  "HoedurStatistics": {
+    "cmdPrefix": [
+      "/bin/zsh",
+      "-ic"
+    ],
+    "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
+    "cargoPath": "/home/akiba/.cargo/bin/cargo",
+    "hoedurRoot": "/data/tools/hoedur",
+    "crashArchiveRoot": "hoedur_projects",
+    "hoedurLogConfigPath": "/data/tools/hoedur/common/log/debug.yml",
+    "rebaseSource": "firmxray_results.base_address"
+  }
+}

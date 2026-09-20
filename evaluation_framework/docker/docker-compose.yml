@@ -1,0 +1,88 @@
+# ---------------------------------------------------------------------------
+# LargeRehostingTesting — pipeline container
+#
+#   docker compose -f evaluation_framework/docker/docker-compose.yml up -d --build
+#
+# The tool sources are bind-mounted at the same paths they live at on the
+# reference server (/data/tools/<tool>) so that the configs in pipelines/,
+# which were proven there, run here unchanged.
+#
+#   host (repo)                     container
+#   evaluated_tools_and_configurations/tools/RealworldFirmware ->      /data/tools/RealworldFirmware  (FirmXRay lives in FirmXRay/)
+#   evaluated_tools_and_configurations/tools/firmline          ->      /data/tools/firmline
+#   evaluated_tools_and_configurations/tools/fuzzware          ->      /data/tools/fuzzware  (vanilla, pipeline stages)
+#   evaluated_tools_and_configurations/tools/gdma              ->      /data/tools/gdma  (fuzzware, branch DMA)
+#   evaluated_tools_and_configurations/tools/hoedur            ->      /data/tools/hoedur
+#   evaluated_tools_and_configurations/tools/MultiFuzz         ->      /data/tools/MultiFuzz
+#   evaluated_tools_and_configurations/tools/FirmRCA           ->      /data/tools/FirmRCA
+#   evaluation_samples/     ->      /data/samples        (firmware sample set)
+#   evaluation_results/    ->      /data/results        (exported results)
+#   evaluation_framework/framework/ -> /opt/rehosting/framework (rebuilds only)
+#
+# Everything the pipeline *produces* (ghidra projects, fuzzware projects, crash
+# archives, postgres instances and the akiba database) stays in named volumes so
+# results survive a rebuild of the image.
+# ---------------------------------------------------------------------------
+name: largerehosting
+
+services:
+  akiba:
+    container_name: largerehosting_akiba
+    image: akiba_allinone:${VERSION:-3.1.2}
+    build:
+      context: ../..
+      dockerfile: evaluation_framework/docker/Dockerfile
+      args:
+        VERSION: ${VERSION:-3.1.2}
+        GHIDRA_VERSION: ${GHIDRA_VERSION:-12.0.4}
+        GHIDRA_FIRMLINE_VERSION: ${GHIDRA_FIRMLINE_VERSION:-11.3.2}
+        R2_VERSION: ${R2_VERSION:-5.9.8}
+        PROVISION_TOOLS: ${PROVISION_TOOLS:-0}
+    # tini as PID 1: the fuzzware pipeline is force-killed at its timeout, which orphans its
+    # own redis-server; with a plain entrypoint as PID 1 those children stay as zombies
+    # forever (nothing reaps them), and the framework's orphan-swipe helper then loops on
+    # them (it cannot kill a zombie) — an init that reaps keeps the stage from hanging.
+    init: true
+    entrypoint: ["/home/akiba/binaries/entrypoint.sh"]
+    command: ["./bin/akiba_db_daemon", "-c", "./resources/config.json"]
+    working_dir: /home/akiba/akiba_db_daemon
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:41777:31777"   # akiba database daemon
+      - "127.0.0.1:31779:22"      # ssh (like the reference server)
+    volumes:
+      - "../../evaluated_tools_and_configurations/tools/RealworldFirmware:/data/tools/RealworldFirmware"
+      - "../../evaluated_tools_and_configurations/tools/firmline:/data/tools/firmline"
+      - "../../evaluated_tools_and_configurations/tools/fuzzware:/data/tools/fuzzware"
+      - "../../evaluated_tools_and_configurations/tools/gdma:/data/tools/gdma"
+      - "../../evaluated_tools_and_configurations/tools/hoedur:/data/tools/hoedur"
+      - "../../evaluated_tools_and_configurations/tools/MultiFuzz:/data/tools/MultiFuzz"
+      - "../../evaluated_tools_and_configurations/tools/FirmRCA:/data/tools/FirmRCA"
+      - "../../evaluation_samples:/data/samples"
+      - "../../evaluation_results:/data/results"
+      - "../../evaluation_framework/pipeline_configs:/data/pipelines:ro"
+      - "../../evaluation_framework/scripts:/opt/rehosting/scripts:ro"
+      - "../../evaluation_framework/framework:/opt/rehosting/framework:ro"
+      - akiba_state:/akiba
+      - akiba_data:/data/akiba
+      - akiba_pg:/var/lib/postgresql
+      # Provisions the tool installers write outside the bind-mounted checkouts.
+      # Keeping them in volumes means an image rebuild no longer throws away the
+      # virtualenvs, the conda environments and /usr/local (radare2, capstone).
+      - akiba_home:/home/akiba
+      - akiba_local:/usr/local
+      - akiba_conda:/opt/conda
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:31777/test || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  akiba_state:
+  akiba_data:
+  akiba_pg:
+  akiba_home:
+  akiba_local:
+  akiba_conda:

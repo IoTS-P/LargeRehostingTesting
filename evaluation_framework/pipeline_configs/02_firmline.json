@@ -1,0 +1,58 @@
+{
+  "metadata": {
+    "description": "Stage \u2014 Firmline (generic non-Linux firmware analysis) over every imported firmware. Writes firmline_results.",
+    "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/02_firmline.json@/main > /data/results/logs/02_firmline.log 2>&1 &",
+    "constraint": "WHERE original_path NOT LIKE '%firmline%' ORDER BY id;"
+  },
+  "main": {
+    "username": "akiba",
+    "password": "akiba",
+    "usingInstance": "akiba-instance",
+    "general": {
+      "binariesRoot": "/data/akiba/binaries",
+      "importRoot": "/",
+      "processor": "n/a",
+      "autoAnalysisTimeout": 180,
+      "threads": 1
+    },
+    "withGhidraProject": {
+      "projectRoot": "/data/akiba/ghidra_projects",
+      "name": "00b_analyze",
+      "mode": "fork",
+      "forkTo": "02_firmline",
+      "continueLog": "02_firmline",
+      "overwriteLog": true,
+      "saveProject": true,
+      "noCreateProgram": false
+    },
+    "sqlSource": {
+      "serverIP": "127.0.0.1",
+      "serverPort": "31777",
+      "useSnapshot": "current",
+      "constraint": "WHERE original_path NOT LIKE '%firmline%' ORDER BY id;",
+      "disableUpdate": false
+    },
+    "dbImports": [
+      "firmxray_results.base_address"
+    ],
+    "tasks": [
+      {
+        "mainClassName": "org.iotsplab.akiba.process.Firmline",
+        "configKey": "@@/Firmline",
+        "consoleLogLevel": "info",
+        "fileLogLevel": "warn",
+        "tableName": "firmline_results"
+      }
+    ]
+  },
+  "Firmline": {
+    "cmdPrefix": [
+      "/bin/bash",
+      "-c"
+    ],
+    "cmdPredo": "source /opt/conda/etc/profile.d/conda.sh && conda activate firmline && export PATH=$PATH:/usr/local/opt/bgrep/usr/bin",
+    "firmlineRoot": "/data/tools/firmline",
+    "ghidraHome": "/opt/ghidra/ghidra_11.3.2_PUBLIC",
+    "pythonRoot": "/opt/conda/envs/firmline/bin/python3"
+  }
+}

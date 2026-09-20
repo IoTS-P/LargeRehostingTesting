@@ -1,0 +1,53 @@
+{
+  "metadata": {
+    "description": "Pre-analysis of every imported raw firmware: ProgramInitialization + FunctionFinder + StringAdder build the 'analysed base' Ghidra project. The fuzzing stages fork from this project (the reference pipeline runs exactly these three modules in its config_analyzed_base.json), because fuzzware's gateway refuses a program without functions \u2014 a raw image imported at base 0 has none until this pre-analysis has run.",
+    "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/00b_analyze.json@/main > /data/results/logs/00b_analyze.log 2>&1 &"
+  },
+  "main": {
+    "username": "akiba",
+    "password": "akiba",
+    "usingInstance": "akiba-instance",
+    "general": {
+      "binariesRoot": "/data/akiba/binaries",
+      "importRoot": "/",
+      "processor": "n/a",
+      "autoAnalysisTimeout": 180,
+      "threads": 1
+    },
+    "withGhidraProject": {
+      "projectRoot": "/data/akiba/ghidra_projects",
+      "name": "00b_analyze",
+      "mode": "new",
+      "forkTo": null,
+      "continueLog": null,
+      "overwriteLog": true,
+      "saveProject": true,
+      "noCreateProgram": false
+    },
+    "sqlSource": {
+      "serverIP": "127.0.0.1",
+      "serverPort": "31777",
+      "useSnapshot": "current",
+      "constraint": "WHERE arch = 'ARM:LE:32:v8T' AND format = 'Raw Binary'",
+      "disableUpdate": false
+    },
+    "dbImports": [],
+    "tasks": [
+      {
+        "mainClassName": "org.iotsplab.akiba.process.ProgramInitialization",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      },
+      {
+        "mainClassName": "org.iotsplab.akiba.process.FunctionFinder",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      },
+      {
+        "mainClassName": "org.iotsplab.akiba.process.StringAdder",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      }
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+services:
+  app:
+    container_name: akiba_all_in_one
+    image: akiba_allinone:${VERSION:-3.1.2}
+    ports:
+      - "0.0.0.0:31779:22"
+      - "0.0.0.0:41777:31777"
+    build: .
+    entrypoint: ["/home/akiba/binaries/entrypoint.sh"]
+    command: ["./bin/akiba_db_daemon", "-c", "./resources/config.json"]
+    working_dir: /home/akiba/akiba_db_daemon
+    volumes:
+      - /data/hongyuan/hongyuan-24:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:31777/test || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  akiba_data:

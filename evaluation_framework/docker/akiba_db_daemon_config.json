@@ -1,0 +1,9 @@
+{
+  "consoleLogLevel": "INFO",
+  "fileLogLevel": "DEBUG",
+  "serverPort": 31777,
+  "pgBinDirectory": "/usr/bin",
+  "backupRoot": "/akiba/backups",
+  "instanceRoot": "/akiba/instances",
+  "instanceMapFile": "/akiba/.akiba/instances.json"
+}

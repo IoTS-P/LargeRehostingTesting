@@ -1,0 +1,154 @@
+diff --git a/.gitmodules b/.gitmodules
+index 8a17e37..7bd1251 100644
+--- a/.gitmodules
++++ b/.gitmodules
+@@ -12,4 +12,4 @@
+ 	url = https://github.com/thezeroalpha/FirmXRay
+ [submodule "binwalk"]
+ 	path = binwalk
+-	url = https://github.com/ReFirmLabs/binwalk
++	url = ./binwalk
+diff --git a/config.ini b/config.ini
+index 729d60e..0a38ab6 100644
+--- a/config.ini
++++ b/config.ini
+@@ -1,14 +1,14 @@
+ [timeouts]
+-# In seconds
+-entropy=300
+-binwalk=600
+-radare2=600
+-ghidra_sigterm=1800
+-ghidra_sigkill=600
++entropy = 600
++binwalk = 1200
++radare2 = 1200
++ghidra_sigterm = 1200
++ghidra_sigkill = 1800
+ 
+ [storage]
+-sqlite_file=./fwdb.db
+-top_firmware_dir=./processed-firmware
+-processed_firmware_dir=%(top_firmware_dir)s/blobs
+-duplicates_dir=%(top_firmware_dir)s/duplicate
+-collisions_dir=%(top_firmware_dir)s/collisions
++sqlite_file = ./fwdb.db
++top_firmware_dir = ./processed-firmware
++processed_firmware_dir = %(top_firmware_dir)s/blobs
++duplicates_dir = %(top_firmware_dir)s/duplicate
++collisions_dir = %(top_firmware_dir)s/collisions
++
+diff --git a/file_analyses.py b/file_analyses.py
+index dddc8f8..58cc08f 100755
+--- a/file_analyses.py
++++ b/file_analyses.py
+@@ -290,22 +290,63 @@ def r2_cpurec(path: Path, path_arch: Optional[str], timeout_sec: Optional[int] =
+         function_dict = dict()
+         for arch, bits, endian in options:
+             assert timeout_sec is not None
+-            @timeout(timeout_sec)
++            # @timeout(timeout_sec)
++            # def do_r2_analysis(*, snd: Optional[multiprocessing.connection.Connection]=None) -> Optional[List]:
++            #     r2 = r2pipe.open(str(path))
++            #     r2.cmd(f'e asm.arch={arch}')
++            #     r2.cmd(f'e asm.bits={bits}')
++            #     r2.cmd(f"e cfg.bigendian={'true' if endian == 'BE' else 'false'}")
++            #     r2.cmd('aaaa')
++            #     r2.cmd('aab')
++            #     afl = r2.cmd('aflj')
++            #     if afl is not None:
++            #         afl = json.loads(afl)
++            #     r2.quit()
++            #     if snd:
++            #         snd.send(afl)
++            #         snd.close()
++            #     return afl
+             def do_r2_analysis(*, snd: Optional[multiprocessing.connection.Connection]=None) -> Optional[List]:
++                import os
++                import signal
++                import threading
++                import time
++                import psutil
++
+                 r2 = r2pipe.open(str(path))
+-                r2.cmd(f'e asm.arch={arch}')
+-                r2.cmd(f'e asm.bits={bits}')
+-                r2.cmd(f"e cfg.bigendian={'true' if endian == 'BE' else 'false'}")
+-                r2.cmd('aaaa')
+-                r2.cmd('aab')
+-                afl = r2.cmd('aflj')
+-                if afl is not None:
+-                    afl = json.loads(afl)
+-                r2.quit()
+-                if snd:
+-                    snd.send(afl)
+-                    snd.close()
+-                return afl
++                stop_event = threading.Event()
++
++                def kill_r2_after_timeout():
++                    if not stop_event.wait(timeout_sec):
++                        try:
++                            me = psutil.Process(os.getpid())
++                            for child in me.children(recursive=True):
++                                if 'radare2' in ' '.join(child.cmdline()):
++                                    print("Killing radare2 process")
++                                    os.kill(child.pid, signal.SIGKILL)
++                                    os._exit(1)
++                        except ProcessLookupError:
++                            pass
++
++                killer_thread = threading.Thread(target=kill_r2_after_timeout, daemon=True)
++                killer_thread.start()
++
++                try:
++                    r2.cmd(f'e asm.arch={arch}')
++                    r2.cmd(f'e asm.bits={bits}')
++                    r2.cmd(f"e cfg.bigendian={'true' if endian == 'BE' else 'false'}")
++                    r2.cmd('aaaa')
++                    r2.cmd('aab')
++                    afl = r2.cmd('aflj')
++                    if afl is not None:
++                        afl = json.loads(afl)
++                    return afl
++                finally:
++                    stop_event.set()
++                    r2.quit()
++                    if snd:
++                        snd.send(afl)
++                        snd.close()
+ 
+             r2_results: TimeoutRT = do_r2_analysis()
+             if isinstance(r2_results, int):
+diff --git a/pipeline.py b/pipeline.py
+index 942cbb7..69d239c 100755
+--- a/pipeline.py
++++ b/pipeline.py
+@@ -7,6 +7,7 @@ import sys
+ import re
+ import os
+ import filecmp
++import errno
+ import db
+ import file_analyses as analyses
+ from typing import Tuple, Optional, Generator, List
+@@ -224,7 +225,18 @@ def process_file(filename: Path, config: Config, dbsession: sessionmaker[Session
+         session.add(fwfile)
+         session.commit()
+ 
+-        filename.rename(newname)
++        # Move the analysed file into the processed store.  The input handed to us may sit on
++        # a different filesystem than this checkout (in the containerised pipeline the akiba
++        # work directory and /data/tools are separate mounts), and rename(2) cannot cross
++        # devices: it fails with EXDEV and the whole run aborts after the analysis is already
++        # done.  Fall back to copy + unlink so the result is kept.
++        try:
++            filename.rename(newname)
++        except OSError as exc:
++            if exc.errno != errno.EXDEV:
++                raise
++            shutil.copy2(filename, newname)
++            filename.unlink()
+         logger.info(f'renamed to {newname}')
+ 
+ 

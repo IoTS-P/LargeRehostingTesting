@@ -1,0 +1,36 @@
+{
+  "metadata": {
+    "description": "Import every firmware binary found under /data/samples into the akiba instance. Run as: ./bin/akiba_framework -c /data/pipelines/00_import.json@/main -i /data/pipelines/generated/import_list.json",
+    "key": "main"
+  },
+  "main": {
+    "username": "akiba",
+    "password": "akiba",
+    "usingInstance": "akiba-instance",
+    "general": {
+      "binariesRoot": "/data/akiba/binaries",
+      "importRoot": "/data/samples",
+      "processor": "n/a",
+      "autoAnalysisTimeout": 180,
+      "threads": 1
+    },
+    "withGhidraProject": {
+      "projectRoot": "/data/akiba/ghidra_projects",
+      "name": "00_import",
+      "mode": "new",
+      "forkTo": null,
+      "continueLog": null,
+      "overwriteLog": false,
+      "saveProject": false,
+      "noCreateProgram": false
+    },
+    "sqlSource": {
+      "serverIP": "127.0.0.1",
+      "serverPort": "31777",
+      "useSnapshot": "current",
+      "constraint": "",
+      "disableUpdate": false
+    },
+    "tasks": []
+  }
+}

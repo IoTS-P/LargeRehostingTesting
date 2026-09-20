@@ -1,0 +1,17 @@
+diff --git a/hail-fuzz/src/debugging/replay.rs b/hail-fuzz/src/debugging/replay.rs
+index 3bed998..55d3881 100644
+--- a/hail-fuzz/src/debugging/replay.rs
++++ b/hail-fuzz/src/debugging/replay.rs
+@@ -252,7 +252,11 @@ fn replay_trace(mut vm: Vm, mut target: CortexmMultiStream) -> anyhow::Result<()
+     }
+     if icicle_fuzzing::parse_bool_env("SAVE_TRACE")?.unwrap_or(true) {
+         let symbolize = icicle_fuzzing::parse_bool_env("SYMBOLIZE_TRACE")?.unwrap_or(false);
+-        path_tracer.save_trace(&mut vm, "trace.txt".as_ref(), symbolize);
++        let trace_path = match std::env::var("TRACE_PATH").ok() {
++            Some(path) => path,
++            None => "trace.txt".to_string(),
++        };
++        path_tracer.save_trace(&mut vm, trace_path.as_ref(), symbolize);
+     }
+     if icicle_fuzzing::parse_bool_env("SAVE_MMIO_READS")?.unwrap_or(false) {
+         trace::save_mmio_reads("mmio_reads.txt".as_ref(), &path_tracer.get_mmio_reads(&mut vm));

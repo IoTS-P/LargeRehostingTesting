@@ -1,0 +1,41 @@
+diff --git a/fuzzware_pipeline/__init__.py b/fuzzware_pipeline/__init__.py
+index 9b91fde..36d48dc 100644
+--- a/fuzzware_pipeline/__init__.py
++++ b/fuzzware_pipeline/__init__.py
+@@ -258,8 +258,9 @@ def do_pipeline(args, leftover_args):
+     logger.info("Performing initial tests")
+     check_cpu_availability(args.num_local_fuzzer_instances)
+ 
+-    if args.skip_afl_cpufreq:
+-        os.environ['AFL_SKIP_CPUFREQ'] = "1"
++    # if args.skip_afl_cpufreq:
++    #     os.environ['AFL_SKIP_CPUFREQ'] = "1"
++    os.environ['AFL_SKIP_CPUFREQ'] = "1"
+     # Fuzzware does not crash the emulator process, disable warning
+     os.environ['AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES'] = "1"
+ 
+diff --git a/setup.sh b/setup.sh
+index 3636ba1..07b6c09 100755
+--- a/setup.sh
++++ b/setup.sh
+@@ -2,9 +2,17 @@
+ 
+ [[ -f /.dockerenv || ! -z $VIRTUAL_ENV ]] || { echo "[ERROR] You want to be installing this in a virtual environment. Did you call this script standalone?"; exit 1; }
+ 
+-# 1. install fuzzware (excluding angr)
++echo "[*] Locking setuptools for pipeline..."
++# `wheel` is required as well: with --no-build-isolation the build runs in this venv, and
++# without it the metadata step dies with "invalid command 'bdist_wheel'".
++pip3 install "setuptools<58.0.0" wheel || exit 1
++
+ echo "[*] Installing pipeline..."
+ pip3 install -U -r requirements.txt || exit 1
+-pip3 install -e . || exit 1
++
++# setuptools<58 (locked above) predates PEP-660 and this pip has dropped --no-use-pep517,
++# so an editable install cannot work here; install normally instead — the venv still gets
++# the `fuzzware` console script the akiba FuzzwareGateway checks for with `type fuzzware`.
++pip3 install --no-build-isolation . || exit 1
+ 
+ exit 0
+\ No newline at end of file
