@@ -14,12 +14,10 @@ If you use this code or data in your research, please cite our paper:
 
 ```bibtex
 @inproceedings{large_rehosting_testing,
- author = {},
- title = {{LargeRehostingTesting}: A Reproducible Evaluation Testbed for Firmware Re-Hosting Tools},
- booktitle = {},
- year = {},
- address = {},
- publisher = {}
+ title = {SoK: A Large-Scale Empirical Study of Emulation-Based Dynamic Analysis Research for ARM Cortex-M Firmware},
+ author = {Li, Hongyuan and Wang, Ke and Zhou, Wei and Guan, Le},
+ booktitle = {NDSS},
+ year = {2026}
 }
 ```
 
