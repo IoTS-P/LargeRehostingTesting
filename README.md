@@ -2,7 +2,7 @@
 
 This repository contains the code and resources covering the paper:
 
-**"LargeRehostingTesting: A Reproducible Evaluation Testbed for Firmware Re-Hosting Tools"**
+**"SoK: A Large-Scale Empirical Study of Emulation-Based Dynamic Analysis Research for ARM Cortex-M Firmware"**
 
 The materials here are provided to support reproducibility and further research.
 
