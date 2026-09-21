@@ -25,49 +25,43 @@ If you use this code or data in your research, please cite our paper:
 
 # A Artifact Appendix
 
-## A.1 Abstract
+## A.1 What is included
 
-This artifact provides a fully automated, containerized evaluation pipeline for six firmware re-hosting and analysis tools (FirmXRay, Firmline, Fuzzware, Hoedur, MultiFuzz, and FirmRCA) orchestrated by the Akiba batch-analysis framework, together with pinned snapshots of five further tools from related work (P²IM, μEmu, DICE-DMA-Emulation, AidFuzzer, and AIM) provided for reference. It includes:
+Our artifact contains the framework, tool snapshots, evaluation data, and detailed results required to reproduce and inspect our empirical study.
 
-- (1) the complete source code of our evaluation framework;
-- (2) snapshots of all evaluated tools, including tool versions, build instructions, patches, and per-tool configurations;
-- (3) full evaluation results and intermediate outputs for four pipeline stages;
-- (4) details of the empirical study, including additional cases supporting the findings in Section V;
-- (5) firmware dataset reconstruction methods with MD5 hashes, source-dataset identifiers, and mappings to retrieve the original firmware from their respective sources.
+**1. Evaluation Framework.**  
+`evaluation_framework/` contains the source code and configurations of our automated pipeline-based evaluation framework, including:
 
-## A.2 Description & Requirements
+- `framework/` — Akiba 3.1.2, our Ghidra-based batch-analysis framework and analysis modules for invoking the evaluated tools and collecting results.
+- `docker/` — Docker configuration for building the complete evaluation environment.
+- `pipeline_configs/` — configurations for the four evaluation stages.
+- `scripts/` — scripts for running the evaluation workflow.
+- `evaluation_samples/` — firmware samples used in the evaluation, provided separately through the reviewer-only Google Drive link (see A.3.5).
+- `evaluation_results/` — per-stage results and intermediate outputs.
 
-### A.2.1 What is Included
+**2. Evaluated Tools and Configurations.**  
+`evaluated_tools_and_configurations/` contains snapshots of the evaluated tools, pinned to the versions used in our study, together with the required build instructions, configurations, and local patches. These include FirmXRay, Firmline, Fuzzware, GDMA, Hoedur, MultiFuzz, FirmRCA, P²IM, μEmu, DICE, AidFuzzer, and AIM. Detailed commit IDs and modifications are documented in the corresponding README files.
 
-**Evaluation Framework.** The source code of our automated pipeline-based firmware evaluation framework, including:
+**3. Evaluation Results.**  
+We provide the complete results and intermediate outputs for all four pipeline stages:
 
-- `evaluation_framework/framework/` — Source code of the Akiba 3.1.2 batch-analysis framework: the core framework (`akiba_framework`), database daemon (`akiba_db_daemon`), the analysis modules (`akiba_modules`), utilities (`akiba_mod_utils`), and an example module (`akiba_mod_example`). Akiba is a Ghidra-based workflow engine that imports firmware binaries, opens Ghidra projects, and runs analysis modules — each module shells out to one of the six evaluated tools and writes results to a database table.
-- `evaluation_framework/docker/` — Container definition (Dockerfile, docker-compose.yml, entrypoint) that builds an all-in-one image (`akiba_allinone:3.1.2`) with Ubuntu 24.04, JDK 21, PostgreSQL 16, Ghidra 12.0.4 (plus 11.3.2 for Firmline), the Akiba framework and its analysis modules compiled from source (37 module JARs; the reference build ships 40 — `CortexEmulator`, `P2IMGateway` and `P2IMRunner` are excluded by the project's own build script or do not compile against the Ghidra 12.0.4 SDK), Miniconda with Python 3.10 and 3.11 environments, the Rust toolchain, Zsh with virtualenvwrapper, and OpenSSH.
-- `evaluation_framework/pipeline_configs/` — Akiba run configurations (one JSON per pipeline stage).
-- `evaluation_framework/scripts/` — Driver scripts for every step of the evaluation workflow.
-- `evaluation_samples/` — the firmware sample set analysed in the evaluation, hosted on Google Drive (see A.3.5); `evaluation_results/` — the published per-stage results (`stage_1.csv` … `stage_4.csv`) plus the working result tree the container writes (`db/`, `logs/`, `generated/`).
+- **Stage 1:** recovered base addresses and entry points, configuration-verification results, and failure categories.
+- **Stage 2:** initialization results, seeds, and failure categories for each tool-firmware pair.
+- **Stage 3:** fuzzing results, including coverage, deduplicated crashes, and failure categories.
+- **Stage 4:** FirmRCA diagnostic outputs and corresponding manual-validation results.
 
-**Evaluated Tools and Configurations.** Snapshots of all evaluated tools, including tool versions, build instructions, patches, and per-tool configurations, subject to their respective licenses:
+**4. Empirical Study Details.**  
+We additionally provide detailed evaluation records and representative cases for the problems identified in the paper, supporting the findings and conclusions of our empirical study.
 
-- `evaluated_tools_and_configurations/tools/` — Git submodule snapshots pinned to the validated commits.
-- `evaluated_tools_and_configurations/patches/` — Local modifications for each tool (documented in `evaluated_tools_and_configurations/patches/README.md`).
+**5. Firmware Dataset.**  
+The evaluation uses 4,571 firmware images collected from FirmLine and OTACap. Due to dataset size and copyright restrictions, the firmware binaries are not publicly redistributed in this repository.
+`dataset_identification_and_reconstruction/binaries_md5.csv` provides the MD5 hash and source-dataset identifier for each firmware image, enabling researchers with access to the original datasets to reconstruct the benchmark. We also provide recoverable metadata and artifact signatures, including vendor and device/MCU model information where identifiable.
 
-| Tool | Upstream Repository | Pinned Commit | Local Modifications |
-|------|-------------------|---------------|---------------------|
-| FirmXRay | MCUSec/RealworldFirmware (FirmXRay/) | `4133f1fe` | `Main.java`, `BaseAddressSolver.java`, `AddressUtil.java` (enhanced variant) |
-| Firmline | LittleNewton/firmline | `38f2ddb8` | `file_analyses.py` (watchdog thread), `.gitmodules` (vendored binwalk) |
-| Fuzzware | fuzzware-fuzzer/fuzzware | `e43dfbd3` | Python 3.10/3.8, `setuptools<58`, `--no-build-isolation`, `_exit→exit`, unconditional `AFL_SKIP_CPUFREQ` (three patch files: top level, emulator, pipeline) |
-| Fuzzware (GDMA) | fuzzware-fuzzer/fuzzware, branch `DMA` (`gdma/`) | `f5979d0` | `install_local.sh` (venv `fuzzware_gdma`), `modeling/setup.sh` (Python 3.10) |
-| Hoedur | fuzzware-fuzzer/hoedur | `a021fd06` | `build.rs` (local QEMU), `scripts/` (absolute paths) |
-| MultiFuzz | MultiFuzz/MultiFuzz | `44d0cc5d` | `replay.rs` (configurable TRACE_PATH) |
-| FirmRCA | NESA-Lab/FirmRCA | `357958d0` | executable autogen.sh, regenerated capnp files |
-| P²IM | RiS3-Lab/p2im | `0e64506a` | none (pristine upstream snapshot) |
-| μEmu | MCUSec/uEmu | `c82fc0a3` | none (pristine upstream snapshot) |
-| DICE | RiS3-Lab/DICE-DMA-Emulation | `2b3b8c8b` | none — DICE brings its own `DICE-Patches/` for P²IM and the MIPS emulator |
-| AidFuzzer | wjqsec/aidfuzzer | `c00d62c4` | none (pristine upstream snapshot) |
-| AIM | bofeng17/AIM-Interrupt-Modeling | `f32b6124` | none (pristine upstream snapshot) |
 
-The first six rows are the tools driven by the automated pipeline; `gdma/` is the DMA-branch variant of Fuzzware used for the DMA-emulation experiments, whose own overlay keeps the two fuzzware installs apart. P²IM, μEmu, DICE-DMA-Emulation, AidFuzzer and AIM are reference snapshots of related work, pinned at the same fidelity for building and inspecting; they are not exercised by a dedicated stage of the pipeline provided here, and snapshotting them required no local modification (`evaluated_tools_and_configurations/patches/` holds an overlay only for the six pipeline tools and `gdma`).
+
+## A.2 Requirements
+
+
 
 ### A.2.2 Hardware Dependencies
 
