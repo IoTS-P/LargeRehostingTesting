@@ -35,10 +35,15 @@ for p in akiba_framework akiba_db_daemon akiba_modules akiba_mod_utils akiba_mod
 done
 
 cd "$BUILD"
+# The image installs Gradle from the release ZIP at /opt/gradle-8.8 (see the Dockerfile); use it
+# instead of ./gradlew, whose wrapper would have to download the distribution again inside the
+# container. Fall back to the wrapper when this script runs on a host without that path.
+if [ -x /opt/gradle-8.8/bin/gradle ]; then GRADLE=/opt/gradle-8.8/bin/gradle; else GRADLE="./gradlew"; fi
+c_blue "==> using Gradle: $GRADLE"
 if [ "$MODULES_ONLY" = 1 ]; then
-  ./gradlew --no-daemon --console=plain ":akiba_modules:moduleJar-ALL" || die "module build failed"
+  $GRADLE --no-daemon --console=plain ":akiba_modules:moduleJar-ALL" || die "module build failed"
 else
-  ./gradlew --no-daemon --console=plain \
+  $GRADLE --no-daemon --console=plain \
     ":akiba_framework:distZip" ":akiba_db_daemon:distZip" ":akiba_modules:moduleJar-ALL" \
     || die "framework build failed"
 fi
