@@ -67,14 +67,15 @@ wraps.
   equivalent
 - writes: `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results`
   (`result`, `detail`) · log: `logs/02b_02b_admission.log`
-- status: provisional — the module parses `[ADMISSION]` lines that the fuzzware revision pinned
-  here does not emit, so the stage currently degrades into a full fuzzing run. See the status note
-  in `docs/pipeline.md`; the reference server reports ~30 s per firmware with its own fuzzware build
-- cost (when the fuzzware support is in place): the whole `fuzzware pipeline` runs per firmware and nothing bounds it — the fuzzing budget
-  of `03`–`05` (`maxTimeout`, `--fuzz-time`) does not apply here. It is iterative (fuzz → regenerate
-  traces → refine the MMIO model → fuzz again), so expect hours per handful of firmwares and a
-  verdict only when each pipeline exits; narrow the constraint to check the stage quickly
-  (`docs/pipeline.md` has the measurements)
+- writes (server-aligned table names): `fuzzware_admission_checks_v2`, `hoedur_admission_checks_v2`,
+  `multifuzz_admission_checks_v2`
+- run inside the modules: the gateway generates `config.yml`, then `fuzzware pipeline
+  --runtime-config-name <config.yml> -p pipeline`, the hoedur conversion + admission run, and the
+  MultiFuzz equivalent. The config wraps the fuzzware binary in `timeout 400` because the pinned
+  fuzzware never stops by itself (the reference server caps at 387 s); the module also captures the
+  fuzzer's own per-seed lines, which is what fills `detail`
+- cost: seconds for firmware that fails admission; up to the 400 s cap for firmware whose seeds
+  pass (reference server: 17.7 s average, 387 s maximum over 2,468 samples — see `docs/pipeline.md`)
 
 ### `03_fuzzware` — Fuzzware fuzzing (Stage 3 Security Testing)
 

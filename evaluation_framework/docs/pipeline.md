@@ -57,14 +57,21 @@ WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)
   AND id IN (SELECT id FROM fuzzware_admission_results WHERE result = 'PASSED')
 ```
 
-**Status: provisional — needs the matching fuzzware support.** The admission modules parse
-`[ADMISSION]` lines, which the fuzzware revision this artifact pins does **not** emit (the string
-does not occur anywhere in `tools/fuzzware`, and none of the captured patches adds it). With the
-pinned fuzzware the module therefore falls back to what `fuzzware pipeline` does by itself — a full
-iterative fuzzing run — and produces no seed verdict. The reference server advertises ~30 seconds
-per firmware for this stage, so its fuzzware build carries the admission check; re-pin or patch
-fuzzware accordingly (or adapt this stage to the procedure the reference server uses) before
-treating `02b` as a measurement. What follows is what the module does when it *is* supported.
+**Relationship to the reference server.** The server runs one admission config per tool
+(`config_{fuzzware,hoedur,multifuzz,aidfuzzer,fuzzware_gdma}_admission.json`), writing
+`*_admission_checks_v2`, and selects firmware with
+`base_address IS NOT NULL AND entry_valid = 'valid'` — both mirrored here, together with its table
+names. Measured over its whole corpus (2,468 rows each): fuzzware 17.7 s average (4.3 s – 387 s),
+hoedur 19.5 s, multifuzz 42.2 s, GDMA 30 s. Two properties of the pinned toolchain have to be
+handled for the artifact to reach those numbers:
+
+* the fuzzware revision pinned here emits no admission marker and never stops by itself, so the
+  module's `[ADMISSION]` match stays empty and the run would continue as a full fuzzing job. The
+  config therefore wraps the binary (`timeout 400 command fuzzware "$@"` in `cmdPredo`) and the
+  module also captures the fuzzer's own per-seed lines (`Seed … PASSED (NORMAL_FULL_CONSUMPTION)`,
+  `… CRASHED. Type: 6 …`), which is what the reference `detail` column contains;
+* `execute_time` for a firmware whose seeds pass is therefore the cap (~400 s), not the seed-check
+  time; a firmware that fails admission still returns in seconds, as on the server.
 
 Cost: the fuzzware admission test runs the *whole* `fuzzware pipeline` and has **no time limit of
 its own** — the budget that bounds stages `03`–`05` (the `maxTimeout` key, and `--fuzz-time`) never

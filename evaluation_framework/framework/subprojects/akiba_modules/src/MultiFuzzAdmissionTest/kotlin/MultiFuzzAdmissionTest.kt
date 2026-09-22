@@ -134,6 +134,13 @@ class MultiFuzzAdmissionTest(
                         admissionDetails.add(detailLine)
                         if (detailLine.contains("FAILED")) overallStatus = "FAILED_OVERALL"
                     } 
+                    else if ((line.contains("PASSED") || line.contains("FAILED")) &&
+                             (line.contains("Seed ") || line.contains("Zeroes") || line.contains("Ones") ||
+                              line.contains("Shifting") || line.contains("base_input"))) {
+                        val detailLine = line.trim()
+                        admissionDetails.add(detailLine)
+                        if (detailLine.contains("FAILED")) overallStatus = "FAILED_OVERALL"
+                    }
                     else if (line.contains("All 3 admission seeds passed!")) {
                         finalSummaryReceived = true
                         if (overallStatus != "FAILED_OVERALL") overallStatus = "PASSED"

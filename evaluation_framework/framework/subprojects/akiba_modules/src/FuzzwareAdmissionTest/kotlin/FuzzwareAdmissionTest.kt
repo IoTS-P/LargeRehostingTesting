@@ -177,6 +177,14 @@ class FuzzwareAdmissionTest (
                             logger.info("Detected Seed Result: $detailLine")
                         } 
 
+                        else if ((line.contains("PASSED") || line.contains("FAILED")) &&
+                                 (line.contains("Seed ") || line.contains("Zeroes") || line.contains("Ones") ||
+                                  line.contains("Shifting") || line.contains("base_input"))) {
+                            val detailLine = line.trim()
+                            admissionDetails.add(detailLine)
+                            if (detailLine.contains("FAILED")) overallStatus = "FAILED_OVERALL"
+                            logger.info("Detected Seed Result: $detailLine")
+                        }
                         else if (line.contains("All initial seeds passed admission test")) {
                             finalSummaryReceived = true
                             if (overallStatus != "FAILED_OVERALL") overallStatus = "PASSED"
