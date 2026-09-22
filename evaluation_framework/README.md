@@ -184,7 +184,7 @@ scripts/smoke_test.sh                     # container-only check: built-in ELF +
 | `setup.sh` | host | checks out the tool submodules at the pinned commits, optional nested submodules, applies `patches/` | `scripts/setup.sh --with-nested` |
 | `apply_patches.sh` | host | applies/checks/reverts the captured tool overlays; idempotent, never leaves a partial state | `scripts/apply_patches.sh --check` |
 | `setup_tools.sh` | container | provisions the six evaluated tools into `/data/tools` (survives rebuilds); logs per tool | `scripts/setup_tools.sh --check` / `scripts/setup_tools.sh gdma hoedur` |
-| `rebuild_framework.sh` | host | rebuilds framework/db-daemon/module JARs from the mounted sources and reinstalls them (needs network) | `scripts/rebuild_framework.sh --modules-only` |
+| `rebuild_framework.sh` | host | rebuilds framework/db-daemon/module JARs from the mounted sources and reinstalls them. It uses `/opt/gradle-8.8` (shipped by the image, see the Dockerfile) and falls back to `./gradlew`; either way Maven Central has to be reachable, and the wrapper fallback additionally needs the Gradle distribution | `scripts/rebuild_framework.sh --modules-only` |
 | `build_akiba_modules.py` | container | builds every module JAR from source in dependency order (used by the image build too) | `python3 build_akiba_modules.py` |
 | `run_pipeline.sh` | host or container | the stage runner: `--list`, `--only`, `--skip`, `--restore`, `--fuzz-time`; exports after every stage; refuses to start when the `/data` bind mounts are stale | `scripts/run_pipeline.sh --only 02b` |
 | `import_samples.sh` | container | imports every firmware under `/data/samples` into the akiba instance (`--list` to preview) | `scripts/import_samples.sh --list` |
