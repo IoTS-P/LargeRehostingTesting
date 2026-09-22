@@ -57,11 +57,19 @@ WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)
   AND id IN (SELECT id FROM fuzzware_admission_results WHERE result = 'PASSED')
 ```
 
-Cost: the fuzzware admission test runs `fuzzware pipeline` itself, so one firmware costs about
-as much as a fuzzing run — the generated `config.yml` carries the fuzzing budget, and the
-module's command line offers no `--run-for` of its own. Budget the stage like a fuzzing stage,
-and expect its per-firmware verdict only at the end of that run (the module collects the
-fuzzer's `[ADMISSION]` lines while the pipeline streams).
+Cost: the fuzzware admission test runs the *whole* `fuzzware pipeline` and has **no time limit of
+its own** — the budget that bounds stages `03`–`05` (the `maxTimeout` key, and `--fuzz-time`) never
+reaches it. `fuzzware pipeline` is itself iterative (fuzz → regenerate traces → refine the MMIO
+model → fuzz again), so one firmware costs many waves and easily more than an hour, and the
+per-firmware verdict is only produced when the pipeline process exits, because that is when the
+module folds the collected `[ADMISSION]` lines into the result.
+
+Measured on the reference container with four firmwares (the `--only 02b` selection): the four
+`fuzzware pipeline` processes ran in parallel for over an hour, six waves in (`main001` …
+`main006`), with AFL queues of 0.9k–7.7k inputs, 282–1,026 crashes each and `stats/job_timings.txt`
+still being appended — progression, not a hang. For a functional check of this stage, either give
+it the time, or narrow the eligibility constraint (`sqlSource.constraint`, e.g. `WHERE id = 3349`)
+so that it admits a single firmware.
 
 Variants: `AidFuzzerAdmissionTest` (add `aidFuzzerRoot: /data/tools/aidfuzzer` and the
 matching task to the config; it needs the AidFuzzer snapshot) and the GDMA flavour
