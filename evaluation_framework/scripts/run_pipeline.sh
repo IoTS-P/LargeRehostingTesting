@@ -24,6 +24,7 @@ set -uo pipefail
 STAGES=(
   "00b|00b_analyze.json|Program pre-analysis (Ghidra functions) — needed by the fuzzers"
   "01|01_firmxray.json|FirmXRay base-address recognition"
+  "02b|02b_admission.json|Admission tests (fuzzware/hoedur/multifuzz seed admission)"
   "03|03_fuzzware.json|Fuzzware fuzzing + crash replay + statistics"
   "04|04_hoedur.json|Hoedur fuzzing + statistics"
   "05|05_multifuzz.json|MultiFuzz fuzzing + replay"
@@ -110,6 +111,19 @@ if [ -n "$RESTORE" ]; then
   ./bin/akiba_framework --restore "$RESTORE" 2>&1 | tee -a "$RESULTS_DIR/logs/restore_$RESTORE.log"
   exit $?
 fi
+
+# The bind mounts under /data come from the host drive (an external FUSE mount on the
+# reference machine).  If that drive was unmounted and mounted again while the container
+# kept running, the container holds the old, dead mount: the directories still appear
+# under /data but cannot be read ("Input/output error", d?????????).  Every stage would
+# then fail with "missing config".  Detect it here and say what to do.
+for d in /data/pipelines /data/samples /data/results; do
+  if [ ! -r "$d" ] || ! ls "$d" >/dev/null 2>&1; then
+    c_red "bind mount $d is not readable — the host drive was (re)mounted after the container started"
+    c_red "fix: docker restart largerehosting_akiba      # pipeline state lives in the named volumes"
+    exit 1
+  fi
+done
 
 rc_all=0
 for s in "${STAGES[@]}"; do

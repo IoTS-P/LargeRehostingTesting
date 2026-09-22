@@ -11,6 +11,8 @@ results/
 │   ├── firmxray_on_fuzzware_results.csv
 │   ├── firmxray_on_fuzzware_replay_results.csv
 │   ├── firmxray_fuzzware_replay_crashes.csv    (view, one row per replayed crash)
+│   ├── fuzzware_admission_results.csv / hoedur_admission_results.csv /
+│   │   multifuzz_admission_results.csv          seed-admission verdict per firmware (stage 02b)
 │   ├── hoedur_fuzz_results.csv / hoedur_statistics_results.csv
 │   ├── multifuzz_results.csv
 │   ├── firmrca_results.csv / firmrca_classified_results.csv
