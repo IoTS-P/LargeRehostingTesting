@@ -57,6 +57,15 @@ WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)
   AND id IN (SELECT id FROM fuzzware_admission_results WHERE result = 'PASSED')
 ```
 
+**Status: provisional — needs the matching fuzzware support.** The admission modules parse
+`[ADMISSION]` lines, which the fuzzware revision this artifact pins does **not** emit (the string
+does not occur anywhere in `tools/fuzzware`, and none of the captured patches adds it). With the
+pinned fuzzware the module therefore falls back to what `fuzzware pipeline` does by itself — a full
+iterative fuzzing run — and produces no seed verdict. The reference server advertises ~30 seconds
+per firmware for this stage, so its fuzzware build carries the admission check; re-pin or patch
+fuzzware accordingly (or adapt this stage to the procedure the reference server uses) before
+treating `02b` as a measurement. What follows is what the module does when it *is* supported.
+
 Cost: the fuzzware admission test runs the *whole* `fuzzware pipeline` and has **no time limit of
 its own** — the budget that bounds stages `03`–`05` (the `maxTimeout` key, and `--fuzz-time`) never
 reaches it. `fuzzware pipeline` is itself iterative (fuzz → regenerate traces → refine the MMIO
