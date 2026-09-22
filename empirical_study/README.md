@@ -651,9 +651,9 @@ N individual firmware defects.
 
 ## P11 — Poor Scalability
 
-The cost is dominated by stage 1 (near-brute-force base-address inference),
-stage 3 (per-crash replay and tracing over three emulators) and stage 4
-(taint-based root-cause analysis).  The paper's measured evidence:
+The cost is dominated by Stage 1 Reconnaissance (near-brute-force base-address inference),
+Stage 3 Security Testing (per-crash replay and tracing over three emulators) and Stage 4
+Diagnosis (taint-based root-cause analysis).  The paper's measured evidence:
 
 - **FirmLine memory explosions.** In several cases FirmLine spawned excessive
   sub-processes and consumed over 200 GB of memory.  The pipeline sets a
@@ -674,9 +674,9 @@ stage 3 (per-crash replay and tracing over three emulators) and stage 4
 
   Note the sizes: a 11 KiB image can cost 34 minutes and 142 GiB — the cost is not a
   function of the firmware size.
-- **Stage 2 modelling.** For most samples the decoupled emulator–fuzzer tools did not
+- **Stage 2 Emulation — modelling.** For most samples the decoupled emulator–fuzzer tools did not
   finish the peripheral-modelling phase within one hour.
-- **Stage 4 taint explosion.** On long crash traces both FirmRCA's analysis time and its
+- **Stage 4 Diagnosis — taint explosion.** On long crash traces both FirmRCA's analysis time and its
   memory consumption grow almost exponentially with trace length.
 - Consequently the corpus-level statistics in this study use bounded per-image budgets
   (fixed fuzzing durations, capped crash-replay counts); a complete per-crash analysis of

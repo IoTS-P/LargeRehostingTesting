@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "description": "Stage \u2014 Firmline (generic non-Linux firmware analysis) over every imported firmware. Writes firmline_results.",
+    "description": "Stage 1 Reconnaissance \u2014 Firmline (generic non-Linux firmware analysis) over every imported firmware. Writes firmline_results.",
     "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/02_firmline.json@/main > /data/results/logs/02_firmline.log 2>&1 &",
     "constraint": "WHERE original_path NOT LIKE '%firmline%' ORDER BY id;"
   },

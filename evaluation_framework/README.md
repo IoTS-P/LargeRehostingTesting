@@ -24,9 +24,11 @@ from earlier stages (`dbImports`) and runs a list of *modules* (`tasks`); each m
 to the tool it wraps and writes one table (`tableName`). `docs/pipeline.md` describes every stage
 and its tables.
 
-Stages in dependency order — reconnaissance (`00b` pre-analysis, `01` FirmXRay, `02` Firmline),
-then **stage 2 admission** (`02b`, fuzzware/hoedur/MultiFuzz seed admission), then fuzzing
-(`03`, `04`, `05`), then root-cause analysis (`06`, `06b`):
+The configs follow the paper's four stages, in dependency order — **Stage 1 Reconnaissance**
+(`00b` pre-analysis, `01` FirmXRay, `02` Firmline), **Stage 2 Emulation** (`02b`: the fuzzware
+configuration plus the fuzzware/hoedur/MultiFuzz seed-admission tests; the fuzzware gateway inside
+`03`–`05` belongs to this stage as well), **Stage 3 Security Testing** (the fuzzing tasks of `03`,
+`04`, `05` and their crash replay/statistics) and **Stage 4 Diagnosis** (`06`, `06b`):
 
 ```bash
 scripts/run_pipeline.sh --list          # the stage table with config file and description

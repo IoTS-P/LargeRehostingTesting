@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "description": "Pre-analysis of every imported raw firmware: ProgramInitialization + FunctionFinder + StringAdder build the 'analysed base' Ghidra project. The fuzzing stages fork from this project (the reference pipeline runs exactly these three modules in its config_analyzed_base.json), because fuzzware's gateway refuses a program without functions \u2014 a raw image imported at base 0 has none until this pre-analysis has run.",
+    "description": "Stage 1 Reconnaissance \u2014 Pre-analysis of every imported raw firmware: ProgramInitialization + FunctionFinder + StringAdder build the 'analysed base' Ghidra project. The fuzzing stages fork from this project (the reference pipeline runs exactly these three modules in its config_analyzed_base.json), because fuzzware's gateway refuses a program without functions \u2014 a raw image imported at base 0 has none until this pre-analysis has run.",
     "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/00b_analyze.json@/main > /data/results/logs/00b_analyze.log 2>&1 &"
   },
   "main": {

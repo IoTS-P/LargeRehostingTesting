@@ -20,8 +20,8 @@
 #      always used; when SAMPLES_URL / --samples-url is given, the full sample set is
 #      downloaded from Google Drive first (evaluation_framework/scripts/fetch_samples_gdrive.sh)
 #   5. import the sample selection (5 ids by default, everything with --full)
-#   6. run the pipeline: 00b pre-analysis -> 01 FirmXRay -> 02b admission ->
-#      03/04/05 fuzzers -> 06/06b FirmRCA -> 02 Firmline
+#   6. run the pipeline in the paper's four stages: Stage 1 Reconnaissance (00b, 01, 02) ->
+#      Stage 2 Emulation (02b) -> Stage 3 Security Testing (03/04/05) -> Stage 4 Diagnosis (06/06b)
 #   7. export the result tables to evaluation_results/db/ and print a summary
 set -uo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"

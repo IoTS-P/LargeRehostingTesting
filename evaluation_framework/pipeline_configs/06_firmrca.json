@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "description": "Stage \u2014 FirmRCA root-cause analysis (first pass): runs the FirmRCA test/classification over the crash inputs that the Fuzzware replay stage produced (view firmxray_fuzzware_replay_crashes, basic_block_cov >= 0.1, one input per (id, pc, lr)). Writes firmrca_results and the view firmrca_classified_results / firmrca_classified_replays, which the second pass consumes.",
+    "description": "Stage 4 Diagnosis \u2014 FirmRCA root-cause analysis (first pass): runs the FirmRCA test/classification over the crash inputs that the Fuzzware replay stage produced (view firmxray_fuzzware_replay_crashes, basic_block_cov >= 0.1, one input per (id, pc, lr)). Writes firmrca_results and the view firmrca_classified_results / firmrca_classified_replays, which the second pass consumes.",
     "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/06_firmrca.json@/main > /data/results/logs/06_firmrca.log 2>&1 &",
     "constraint": "WHERE id IN (SELECT DISTINCT id FROM (SELECT *, row_number() OVER (PARTITION BY id, pc, lr ORDER BY random()) AS rn FROM firmxray_fuzzware_replay_crashes WHERE basic_block_cov >= 0.1) WHERE rn = 1)"
   },

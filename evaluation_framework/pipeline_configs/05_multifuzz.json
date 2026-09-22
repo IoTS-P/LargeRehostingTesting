@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "description": "Stage \u2014 MultiFuzz: FuzzwareGateway prepares the per-firmware project (base address from FirmXRay), MultiFuzz runs the fuzzer and replays the crashes. Table: multifuzz_results.",
+    "description": "Stage 3 Security Testing (FuzzwareGateway = Stage 2 Emulation) \u2014 MultiFuzz: FuzzwareGateway prepares the per-firmware project (base address from FirmXRay), MultiFuzz runs the fuzzer and replays the crashes. Table: multifuzz_results.",
     "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/05_multifuzz.json@/main > /data/results/logs/05_multifuzz.log 2>&1 &",
     "constraint": "WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)"
   },
