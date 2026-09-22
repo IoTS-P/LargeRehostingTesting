@@ -36,6 +36,9 @@ Our artifact contains the framework, tool snapshots, evaluation data, and detail
 - `docker/` — Docker configuration for building the complete evaluation environment.
 - `pipeline_configs/` — configurations for the four evaluation stages.
 - `scripts/` — scripts for running the evaluation workflow.
+- `README.md` — the script reference: what every committed driver does, where it runs, and how to
+  run a single stage, a single module or a single firmware (`docs/pipeline.md` documents the stages
+  and the tables they write).
 - `evaluation_samples/` — firmware samples used in the evaluation, provided separately through the reviewer-only Google Drive link (see A.3.5).
 - `evaluation_results/` — per-stage results and intermediate outputs.
 
