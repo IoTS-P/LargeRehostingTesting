@@ -48,10 +48,10 @@ Our artifact contains the framework, tool snapshots, evaluation data, and detail
 **3. Evaluation Results.**  
 We provide the complete results and intermediate outputs for all four pipeline stages:
 
-- **Stage 1:** recovered base addresses and entry points, configuration-verification results, and failure categories.
-- **Stage 2:** initialization results, seeds, and failure categories for each tool-firmware pair.
-- **Stage 3:** fuzzing results, including coverage, deduplicated crashes, and failure categories.
-- **Stage 4:** FirmRCA diagnostic outputs and corresponding manual-validation results.
+- **Stage 1 — Reconnaissance:** recovered base addresses and entry points, configuration-verification results, and failure categories.
+- **Stage 2 — Emulation:** emulation configuration, initialization results, seed admission, and failure categories for each tool-firmware pair.
+- **Stage 3 — Security Testing:** fuzzing results, including coverage, deduplicated crashes, and failure categories.
+- **Stage 4 — Diagnosis:** FirmRCA diagnostic outputs and corresponding manual-validation results.
 
 **4. Empirical Study Details.**  
 We additionally provide detailed evaluation records and representative cases for the problems identified in the paper, supporting the findings and conclusions of our empirical study.
@@ -163,7 +163,7 @@ and are not defects:
 
 ## A.4 Evaluation Workflow
 
-The artifact automates the full evaluation pipeline. Stage `02b` (admission) sits between the reconnaissance stages `01`/`02` and the fuzzing stages `03`–`05`, exactly as in the paper's stage 2:
+The artifact automates the full evaluation pipeline, which follows the paper's four stages — **Stage 1 Reconnaissance** (`00b` pre-analysis, `01` FirmXRay, `02` Firmline), **Stage 2 Emulation** (`02b` admission, plus the configuration generation and modelling the fuzzware gateway performs for `03`–`05`), **Stage 3 Security Testing** (the fuzzing tasks of `03`–`05`) and **Stage 4 Diagnosis** (`06`/`06b` FirmRCA). Stage `02b` is the explicit split between the first two:
 
 ```bash
 evaluation_framework/scripts/run_pipeline.sh               # all stages in dependency order
@@ -199,7 +199,7 @@ evaluation_framework/scripts/run_pipeline.sh --fuzz-time 2m   # 01 → 03 → 04
 
 Each stage writes its database table (exported to `evaluation_results/db/<table>.csv`) and its logs (`evaluation_results/logs/<stage>.log`). The pipeline produces four stages of results:
 
-### Stage 1 — FirmXRay base-address recognition
+### Stage 1 — Reconnaissance: base-address and entry-point recovery
 
 *Recovered base addresses and entry points, configuration-verification results, and problem categories for failed verification.*
 
@@ -208,7 +208,7 @@ Each stage writes its database table (exported to `evaluation_results/db/<table>
 - Config: `evaluation_framework/pipeline_configs/01_firmxray.json`
 - The enhanced FirmXRay variant returns -1 for base addresses it cannot determine, producing the "failed" cases that are categorized.
 
-### Stage 2 — Tool initialization and seed generation
+### Stage 2 — Emulation: initialization, configuration and seed admission
 
 *For each tool-firmware combination: the initialization results, the used seeds, and problem categories for unsuccessful cases.*
 
@@ -217,14 +217,14 @@ Each stage writes its database table (exported to `evaluation_results/db/<table>
 - Output tables: `firmxray_on_fuzzware_results`, `hoedur_fuzz_results`, `multifuzz_results`
 - The gateway module prepares per-firmware fuzzware projects; unreliable firmwares where FirmXRay did not return a base address are skipped.
 
-### Stage 3 — Fuzzing results
+### Stage 3 — Security Testing: fuzzing results
 
 *For each tool-firmware combination: the fuzzing results, including coverage, deduplicated crash counts, and problem categories for unsuccessful cases.*
 
 - Output tables: `firmxray_on_fuzzware_replay_results` (view `firmxray_fuzzware_replay_crashes`), `hoedur_statistics_results`, `multifuzz_results`
 - Coverage computed by `FuzzwareStat` module (`firmxray_on_fuzzware_stat_results`)
 
-### Stage 4 — FirmRCA diagnostics and manual verification
+### Stage 4 — Diagnosis: FirmRCA results and manual verification
 
 *Diagnostic outputs from FirmRCA and the corresponding manual verification results.*
 
@@ -338,4 +338,4 @@ Pipeline stage configs are passed to the framework with a JSON pointer — `./bi
 ## A.9 Notes on Discrepancies
 
 - The published evaluation results (`evaluation_results/stage_*.csv`) are the canonical outputs. Re-running on the same corpus should reproduce them qualitatively (same base addresses, order-of-magnitude crash counts, problem categories), but exact values may differ due to timing-dependent fuzzing and Ghidra version differences.
-- FirmRCA results (Stage 4) depend on specific crash inputs from fuzzing stages; different crash sets produce different FirmRCA outputs. The provided `empirical_study/firmrca_analysis/` captures one run for reproducibility.
+- FirmRCA results (Stage 4 — Diagnosis) depend on specific crash inputs from fuzzing stages; different crash sets produce different FirmRCA outputs. The provided `empirical_study/firmrca_analysis/` captures one run for reproducibility.

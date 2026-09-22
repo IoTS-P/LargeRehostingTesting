@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "description": "Second FirmRCA pass: classify the inputs that the first pass marked (classifiedMode=true, input list comes from the view firmrca_classified_replays). Same shape as 06_firmrca.json, only classifiedMode and dbImports differ \u2014 keep the two in sync.",
+    "description": "Stage 4 Diagnosis \u2014 Second FirmRCA pass: classify the inputs that the first pass marked (classifiedMode=true, input list comes from the view firmrca_classified_replays). Same shape as 06_firmrca.json, only classifiedMode and dbImports differ \u2014 keep the two in sync.",
     "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/06b_firmrca_classify.json@/main > /data/results/logs/06b_firmrca_classify.log 2>&1 &",
     "constraint": "WHERE id IN (SELECT id FROM firmrca_classified_replays)"
   },

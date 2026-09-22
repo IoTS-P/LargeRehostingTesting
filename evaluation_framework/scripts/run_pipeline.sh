@@ -22,15 +22,15 @@ set -uo pipefail
 
 # stage id | config file | human description
 STAGES=(
-  "00b|00b_analyze.json|Program pre-analysis (Ghidra functions) — needed by the fuzzers"
-  "01|01_firmxray.json|FirmXRay base-address recognition"
-  "02b|02b_admission.json|Admission tests (fuzzware/hoedur/multifuzz seed admission)"
-  "03|03_fuzzware.json|Fuzzware fuzzing + crash replay + statistics"
-  "04|04_hoedur.json|Hoedur fuzzing + statistics"
-  "05|05_multifuzz.json|MultiFuzz fuzzing + replay"
-  "06|06_firmrca.json|FirmRCA root cause analysis (classify pass 1)"
-  "06b|06b_firmrca_classify.json|FirmRCA classification (pass 2)"
-  "02|02_firmline.json|Firmline firmware analysis"
+  "00b|00b_analyze.json|Stage 1 Reconnaissance — program pre-analysis (Ghidra functions)"
+  "01|01_firmxray.json|Stage 1 Reconnaissance — FirmXRay base-address recognition"
+  "02b|02b_admission.json|Stage 2 Emulation — seed admission (fuzzware/hoedur/multifuzz)"
+  "03|03_fuzzware.json|Stage 3 Security Testing — Fuzzware fuzzing, crash replay, statistics"
+  "04|04_hoedur.json|Stage 3 Security Testing — Hoedur fuzzing + statistics"
+  "05|05_multifuzz.json|Stage 3 Security Testing — MultiFuzz fuzzing + replay"
+  "06|06_firmrca.json|Stage 4 Diagnosis — FirmRCA root-cause analysis (classify pass 1)"
+  "06b|06b_firmrca_classify.json|Stage 4 Diagnosis — FirmRCA classification (pass 2)"
+  "02|02_firmline.json|Stage 1 Reconnaissance — Firmline firmware analysis"
 )
 
 ONLY=""; SKIP=""; RESTORE=""; FUZZ_TIME=""

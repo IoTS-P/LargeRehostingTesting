@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "description": "Stage \u2014 Hoedur: FuzzwareGateway prepares the per-firmware project, HoedurFuzz runs the hoedur fuzzer, HoedurStatistics summarises the run. Tables: hoedur_fuzz_results, hoedur_statistics_results.",
+    "description": "Stage 3 Security Testing (FuzzwareGateway = Stage 2 Emulation) \u2014 Hoedur: FuzzwareGateway prepares the per-firmware project, HoedurFuzz runs the hoedur fuzzer, HoedurStatistics summarises the run. Tables: hoedur_fuzz_results, hoedur_statistics_results.",
     "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/04_hoedur.json@/main > /data/results/logs/04_hoedur.log 2>&1 &",
     "constraint": "WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)"
   },
