@@ -40,12 +40,24 @@ cd "$BUILD"
 # container. Fall back to the wrapper when this script runs on a host without that path.
 if [ -x /opt/gradle-8.8/bin/gradle ]; then GRADLE=/opt/gradle-8.8/bin/gradle; else GRADLE="./gradlew"; fi
 c_blue "==> using Gradle: $GRADLE"
+# The modules cannot be built with a single ":akiba_modules:moduleJar-ALL" invocation: the
+# project's build.gradle.kts resolves inter-module dependencies to the JAR files inside
+# `build/libs` while it *creates* each module's task, so in a clean tree the task creation
+# itself fails ("Could not create task … amod-<dep>.jar (No such file or directory)").
+# scripts/build_akiba_modules.py parses the module list and the dependency graph and builds
+# them in topological batches — the Dockerfile uses the same helper.
+build_modules() {
+  python3 /opt/rehosting/scripts/build_akiba_modules.py \
+    --project "$BUILD/subprojects/akiba_modules" --gradle-root "$BUILD" \
+    --gradle "$GRADLE" --jobs "${JOBS:-4}" "$@" || die "module build failed"
+}
 if [ "$MODULES_ONLY" = 1 ]; then
-  $GRADLE --no-daemon --console=plain ":akiba_modules:moduleJar-ALL" || die "module build failed"
+  build_modules
 else
   $GRADLE --no-daemon --console=plain \
-    ":akiba_framework:distZip" ":akiba_db_daemon:distZip" ":akiba_modules:moduleJar-ALL" \
+    ":akiba_framework:distZip" ":akiba_db_daemon:distZip" ":akiba_mod_utils:moduleJar-AkibaUtils" \
     || die "framework build failed"
+  build_modules
 fi
 
 cp "$BUILD"/subprojects/akiba_modules/build/libs/amod-*.jar /home/akiba/akiba_framework/modules/ \
