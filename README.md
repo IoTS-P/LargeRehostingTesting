@@ -138,7 +138,7 @@ evaluation_framework/scripts/quickstart.sh           # 5 hard-coded samples, 2 m
 evaluation_framework/scripts/quickstart.sh --full    # every sample, shipped 1 h fuzz budget
 ```
 
-`quickstart.sh` builds the image if it is missing, starts the container (first boot initialises PostgreSQL and creates the `akiba-instance`), provisions whichever of the six tools are still missing, fetches the sample set when `--samples-url` is given (otherwise it uses the empirical-study images that ship with the artifact), imports the selection and then runs the pipeline — `00b` pre-analysis → `01` FirmXRay → `03` Fuzzware → `04` Hoedur → `05` MultiFuzz → `06`/`06b` FirmRCA → `02` Firmline — and finally exports and summarises the result tables.
+`quickstart.sh` builds the image if it is missing, starts the container (first boot initialises PostgreSQL and creates the `akiba-instance`), provisions whichever of the six tools are still missing, fetches the sample set when `--samples-url` is given (otherwise it uses the empirical-study images that ship with the artifact), imports the selection and then runs the pipeline — `00b` pre-analysis → `01` FirmXRay → `02b` admission → `03` Fuzzware → `04` Hoedur → `05` MultiFuzz → `06`/`06b` FirmRCA → `02` Firmline — and finally exports and summarises the result tables. Stage `02b` runs the admission tests of fuzzware, hoedur and MultiFuzz over the pre-analysis project and records, per firmware, whether the seeds are admissible (tables `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results`); it is the stage that separates "cannot be fuzzed" from "fuzzed badly" (paper §V).
 
 The tool provisions live in named volumes (`akiba_home`, `akiba_local`, `akiba_conda`), so later runs skip them; `quickstart.sh` wipes only the pipeline state (database, Ghidra/fuzzware projects) by default, which is what makes a repeated test reproducible. Pass `--keep-state` to resume instead, `--samples 804,3349` to test other ids, or `--list-stages` to see the stage table.
 
@@ -160,7 +160,7 @@ and are not defects:
 
 ## A.4 Evaluation Workflow
 
-The artifact automates the full evaluation pipeline:
+The artifact automates the full evaluation pipeline. Stage `02b` (admission) sits between the reconnaissance stages `01`/`02` and the fuzzing stages `03`–`05`, exactly as in the paper's stage 2:
 
 ```bash
 evaluation_framework/scripts/run_pipeline.sh               # all stages in dependency order
@@ -174,11 +174,10 @@ evaluation_framework/scripts/run_pipeline.sh --fuzz-time 2m
 
 ### Verification run on the empirical-study samples
 
-The 23 firmware images behind §V of the paper ship inside `empirical_study/samples_in_empirical_study.zip` (2.7 MB, the original images; each md5 and size matches `dataset_identification_and_reconstruction/binaries_md5.csv`). They are the fastest way to exercise every evaluated tool end to end:
+The 23 firmware images behind §V of the paper ship in `evaluation_samples/empirical_study_samples/` (original images; each md5 and size matches `dataset_identification_and_reconstruction/binaries_md5.csv`, and `evaluation_samples/scripts/verify_corpus.py` re-checks them against `evaluation_samples/original_md5.csv`). They are the fastest way to exercise every evaluated tool end to end:
 
 ```bash
-cd evaluation_samples && unzip -o ../empirical_study/samples_in_empirical_study.zip -d empirical_study_samples
-cd ..
+# the 23 images are already in place; their import list ships as
 
 # the 23-entry list ships as evaluation_results/generated/import_list_verify.json;
 # regenerate it from the extracted images if needed:

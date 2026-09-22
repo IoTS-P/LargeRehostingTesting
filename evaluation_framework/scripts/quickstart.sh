@@ -20,8 +20,8 @@
 #      always used; when SAMPLES_URL / --samples-url is given, the full sample set is
 #      downloaded from Google Drive first (evaluation_framework/scripts/fetch_samples_gdrive.sh)
 #   5. import the sample selection (5 ids by default, everything with --full)
-#   6. run the pipeline: 00b pre-analysis -> 01 FirmXRay -> 03/04/05 fuzzers ->
-#      06/06b FirmRCA -> 02 Firmline
+#   6. run the pipeline: 00b pre-analysis -> 01 FirmXRay -> 02b admission ->
+#      03/04/05 fuzzers -> 06/06b FirmRCA -> 02 Firmline
 #   7. export the result tables to evaluation_results/db/ and print a summary
 set -uo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -32,7 +32,7 @@ set -uo pipefail
 # paper discusses: 804 (A-group NPE), 1179, 224, 227 (vulnerability cases) and 3349
 # (the FirmRCA limitation case).  Keep them small — they are imported and fuzzed per run.
 DEFAULT_SAMPLES=(804 1179 224 227 3349)
-STAGE_ORDER="00b,01,03,04,05,06,06b,02"
+STAGE_ORDER="00b,01,02b,03,04,05,06,06b,02"
 QUICK_FUZZ_TIME="2m"
 
 FULL=0; BUILD=0; FRESH=1; DO_SAMPLES=1; SKIP_PROVISION=0

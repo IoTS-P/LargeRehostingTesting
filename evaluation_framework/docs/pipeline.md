@@ -20,6 +20,36 @@ table (`dbImports: ["firmxray_results.base_address"]`). Firmwares for which
 FirmXRay fails get `err_msg = 'failed'` and are excluded from the later stages by
 the `base_address IS NOT NULL` constraint.
 
+## Stage 02b — Admission (stage 2 of the paper)
+
+* modules: `FuzzwareGateway`, then `FuzzwareAdmissionTest`, `HoedurAdmissionTest`,
+  `MultiFuzzAdmissionTest`
+* runs: the gateway generates `config.yml` for each firmware (the same call stage 03
+  makes), then each admission test asks its fuzzer whether the initial seeds are
+  admissible — `fuzzware pipeline --runtime-config-name <config> -p pipeline`,
+  `hoedur-convert-fuzzware-config` + the hoedur admission run, and the MultiFuzz
+  equivalent
+* writes: `fuzzware_admission_results`, `hoedur_admission_results`,
+  `multifuzz_admission_results` (`result TEXT`, `detail TEXT`)
+
+`result` is `PASSED`, `FAILED_*` or `NOT_RUN`/`RUNTIME_ERROR`; `detail` carries the
+per-seed `[ADMISSION]` lines the fuzzer printed. This is the stage that decides how
+many samples of a corpus are fuzzable at all, so run it before the fuzzing stages.
+Admission is *reported*, not enforced: the fuzzing stages keep their
+`base_address IS NOT NULL` constraint. To use it as a gate, replace that constraint
+in `03_fuzzware.json`, `04_hoedur.json` and `05_multifuzz.json` with, for example:
+
+```sql
+WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)
+  AND id IN (SELECT id FROM fuzzware_admission_results WHERE result = 'PASSED')
+```
+
+Variants: `AidFuzzerAdmissionTest` (add `aidFuzzerRoot: /data/tools/aidfuzzer` and the
+matching task to the config; it needs the AidFuzzer snapshot) and the GDMA flavour
+(copy the config and set `venv: fuzzware_gdma` in `FuzzwareGateway` and
+`FuzzwareAdmissionTest`, which routes the gateway and the admission run through the
+DMA-branch fuzzware install).
+
 ## Stage 03 — Fuzzware
 
 `FuzzwareGateway` prepares a project per firmware under

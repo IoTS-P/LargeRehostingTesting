@@ -1,0 +1,110 @@
+{
+  "metadata": {
+    "description": "Stage 2 \u2014 Admission: FuzzwareGateway generates the fuzzware configuration for each firmware (rebase from firmxray_results.base_address) and the three admission tests then ask each fuzzer whether its seeds are admissible. FuzzwareAdmissionTest runs the fuzzware pipeline admission stage and parses its [ADMISSION] lines; HoedurAdmissionTest converts the fuzzware config with hoedur-convert-fuzzware-config and runs the hoedur admission test; MultiFuzzAdmissionTest does the same for MultiFuzz. Each test writes result/detail into its own table: fuzzware_admission_results, hoedur_admission_results, multifuzz_admission_results. Firmware whose admission fails keeps result=FAILED_* and is normally excluded from the fuzzing stages; docs/pipeline.md gives the gating constraint and the AidFuzzer / GDMA variants.",
+    "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/02b_admission.json@/main > /data/results/logs/02b_admission.log 2>&1 &",
+    "constraint": "WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)"
+  },
+  "main": {
+    "username": "akiba",
+    "password": "akiba",
+    "usingInstance": "akiba-instance",
+    "general": {
+      "binariesRoot": "/data/akiba/binaries",
+      "importRoot": "/",
+      "processor": "n/a",
+      "autoAnalysisTimeout": 180,
+      "threads": 32
+    },
+    "withGhidraProject": {
+      "projectRoot": "/data/akiba/ghidra_projects",
+      "name": "00b_analyze",
+      "mode": "fork",
+      "forkTo": "02b_admission",
+      "continueLog": "02b_admission",
+      "overwriteLog": true,
+      "saveProject": true,
+      "noCreateProgram": false
+    },
+    "sqlSource": {
+      "serverIP": "127.0.0.1",
+      "serverPort": "31777",
+      "useSnapshot": "current",
+      "constraint": "WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)",
+      "disableUpdate": false
+    },
+    "dbImports": [
+      "firmxray_results.base_address"
+    ],
+    "tasks": [
+      {
+        "mainClassName": "org.iotsplab.akiba.process.FuzzwareGateway",
+        "configKey": "@@/FuzzwareGateway",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      },
+      {
+        "mainClassName": "org.iotsplab.akiba.process.FuzzwareAdmissionTest",
+        "configKey": "@@/FuzzwareAdmissionTest",
+        "tableName": "fuzzware_admission_results",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      },
+      {
+        "mainClassName": "org.iotsplab.akiba.process.HoedurAdmissionTest",
+        "configKey": "@@/HoedurAdmissionTest",
+        "tableName": "hoedur_admission_results",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      },
+      {
+        "mainClassName": "org.iotsplab.akiba.process.MultiFuzzAdmissionTest",
+        "configKey": "@@/MultiFuzzAdmissionTest",
+        "tableName": "multifuzz_admission_results",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      }
+    ]
+  },
+  "FuzzwareGateway": {
+    "cmdPrefix": [
+      "/bin/zsh",
+      "-ic"
+    ],
+    "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
+    "regenerateConfig": true,
+    "projectRoot": "fuzzware_projects",
+    "venv": "fuzzware"
+  },
+  "FuzzwareAdmissionTest": {
+    "cmdPrefix": [
+      "/bin/zsh",
+      "-ic"
+    ],
+    "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
+    "venv": "fuzzware",
+    "projectRoot": "fuzzware_admission_test"
+  },
+  "HoedurAdmissionTest": {
+    "cmdPrefix": [
+      "/bin/zsh",
+      "-ic"
+    ],
+    "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
+    "venv": "fuzzware",
+    "projectRoot": "hoedur_admission_test",
+    "hoedurRoot": "/data/tools/hoedur",
+    "cargoPath": "cargo",
+    "baseAddressSource": "firmxray_results.base_address"
+  },
+  "MultiFuzzAdmissionTest": {
+    "cmdPrefix": [
+      "/bin/zsh",
+      "-ic"
+    ],
+    "cmdPredo": "source ~/.zshrc",
+    "projectRoot": "multifuzz_admission_test",
+    "multiFuzzRoot": "/data/tools/MultiFuzz",
+    "cargoPath": "cargo",
+    "baseAddressSource": "firmxray_results.base_address"
+  }
+}
