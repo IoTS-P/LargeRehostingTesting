@@ -16,23 +16,96 @@ evaluation_framework/
 └── scripts/             the drivers (below)
 ```
 
-## How a run is put together
+## Step by step: what every step does
 
-A *stage* is one JSON config. A config selects firmware rows (`sqlSource.constraint`), opens a
-Ghidra project (usually by forking the `00b_analyze` pre-analysis project), imports a few columns
-from earlier stages (`dbImports`) and runs a list of *modules* (`tasks`); each module shells out
-to the tool it wraps and writes one table (`tableName`). `docs/pipeline.md` describes every stage
-and its tables.
+Execution order, one entry per config in `pipeline_configs/`. `scripts/run_pipeline.sh --only <id>`
+runs exactly one of them (including its log and result export); `docs/pipeline.md` documents the
+modules behind each step in more detail. The tool is the checkout under `/data/tools/` the module
+wraps.
 
-The configs follow the paper's four stages, in dependency order — **Stage 1 Reconnaissance**
-(`00b` pre-analysis, `01` FirmXRay, `02` Firmline), **Stage 2 Emulation** (`02b`: the fuzzware
-configuration plus the fuzzware/hoedur/MultiFuzz seed-admission tests; the fuzzware gateway inside
-`03`–`05` belongs to this stage as well), **Stage 3 Security Testing** (the fuzzing tasks of `03`,
-`04`, `05` and their crash replay/statistics) and **Stage 4 Diagnosis** (`06`, `06b`):
+### `00_import` — put the firmware into the database (setup, before Stage 1)
 
-```bash
-scripts/run_pipeline.sh --list          # the stage table with config file and description
-```
+- tool: none — the framework's own importer
+- run: `./bin/akiba_framework -c /data/pipelines/00_import.json@/main -i <import-list.json>`, or
+  `scripts/import_samples.sh`, which builds that list from `evaluation_samples/`
+- writes: `binaries` (path, arch, format, md5, size) · log: `evaluation_results/logs/00_import.log`
+
+### `00b_analyze` — Ghidra pre-analysis (Stage 1 Reconnaissance)
+
+- modules: `ProgramInitialization`, `FunctionFinder`, `StringAdder`
+- tool: Ghidra 12.0.4 headless, driven by the framework itself
+- run: `scripts/run_pipeline.sh --only 00b`
+- writes: `program_initialization_results`, `function_finder_results`, `string_adder_results`, and
+  the Ghidra project `/data/akiba/ghidra_projects/00b_analyze` that every later stage forks ·
+  log: `logs/00b_00b_analyze.log`
+- why first: `FuzzwareGateway` refuses to start when the program has no functions
+  (`allFunctions.isEmpty()`), so nothing can fuzz before this step has run
+
+### `01_firmxray` — base address and entry validity (Stage 1)
+
+- module: `FirmXRay`, the enhanced variant of `MCUSec/RealworldFirmware` at
+  `/data/tools/RealworldFirmware/FirmXRay`
+- run inside the module: `java -cp out:lib/ghidra.jar:lib/json.jar main.Main <firmware> Nordic`
+- writes: `firmxray_results` (`base_address`, `entry_valid`, `err_msg`) ·
+  log: `logs/01_01_firmxray.log`
+- downstream: `base_address IS NOT NULL` is the constraint of every later stage
+
+### `02_firmline` — generic firmware analysis (Stage 1)
+
+- module: `Firmline` → `/data/tools/firmline`, run in its own conda environment
+- run: `scripts/run_pipeline.sh --only 02`
+- writes: `firmline_results` (`err_msg`) · log: `logs/02_02_firmline.log`
+- independent of the base address; its constraint skips images that already come from the FirmLine
+  dataset
+
+### `02b_admission` — seed admission (Stage 2 Emulation)
+
+- modules: `FuzzwareGateway` (generates the fuzzware configuration), then
+  `FuzzwareAdmissionTest`, `HoedurAdmissionTest`, `MultiFuzzAdmissionTest`
+- run inside the modules: `fuzzware pipeline --runtime-config-name <config.yml> -p pipeline`,
+  `hoedur-convert-fuzzware-config` followed by the hoedur admission run, and the MultiFuzz
+  equivalent
+- writes: `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results`
+  (`result`, `detail`) · log: `logs/02b_02b_admission.log`
+- cost: one `fuzzware pipeline` per firmware, i.e. roughly a fuzzing run
+
+### `03_fuzzware` — Fuzzware fuzzing (Stage 3 Security Testing)
+
+- modules: `FuzzwareGateway` (one project + `config.yml` per firmware, rebased to
+  `firmxray_results.base_address`), `FirmXRayOnFuzzware` (the fuzzing run, `maxTimeout` per
+  firmware), `FirmXRayOnFuzzwareReplay` (replays every crash input), `FuzzwareStat` (coverage)
+- writes: `firmxray_on_fuzzware_results`, `firmxray_on_fuzzware_replay_results`,
+  `firmxray_on_fuzzware_stat_results`, and the view `firmxray_fuzzware_replay_crashes` ·
+  log: `logs/03_03_fuzzware.log`
+- per-firmware work tree: `/data/akiba/binaries/fuzzware_projects/<id>/`
+
+### `04_hoedur` — Hoedur fuzzing (Stage 3)
+
+- modules: `FuzzwareGateway`, `HoedurFuzz`, `HoedurStatistics`
+- writes: `hoedur_fuzz_results` (`actual_fuzz_time`), `hoedur_statistics_results` (crash, timeout
+  and exit counts, per-run coverage, executions) · log: `logs/04_04_hoedur.log`
+- note: Hoedur treats executions beyond three million basic blocks as a timeout, and its wall time
+  can exceed the budget on crash-heavy firmware
+
+### `05_multifuzz` — MultiFuzz fuzzing (Stage 3)
+
+- modules: `FuzzwareGateway`, `MultiFuzz`
+- writes: `multifuzz_results` (`coverage`, `crash_count`, `hang_count`, `replay_data`) ·
+  log: `logs/05_05_multifuzz.log`
+
+### `06_firmrca` / `06b_firmrca_classify` — root-cause analysis (Stage 4 Diagnosis)
+
+- module: `FirmRCA` → `/data/tools/FirmRCA`; pass 1 selects the replayed crash inputs with
+  `basic_block_cov >= 0.1`, pass 2 (`classifiedMode: true`) classifies what pass 1 selected
+- writes: `firmrca_results`, `firmrca_classified_results` (view `firmrca_classified_replays`) ·
+  logs: `logs/06_06_firmrca.log`, `logs/06b_06b_firmrca_classify.log`
+- when no crash input reaches the 0.1 threshold the stage stops with
+  `Empty query results, quit immediately` — a valid outcome, not a failure
+
+### `smoke_test` — container self-check
+
+- module: `Entropy` over the example ELF that ships inside the image ·
+  run: `scripts/smoke_test.sh` · writes: `example_table`
 
 ## Run everything (one command)
 

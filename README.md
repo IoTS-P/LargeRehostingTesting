@@ -68,14 +68,21 @@ The evaluation uses 4,571 firmware images collected from FirmLine and OTACap. Du
 
 ### A.2.2 Hardware Dependencies
 
-- A machine with an x86-64 CPU and at least 32 GB of memory is recommended. The container image is 7.9 GB; on top of that the pipeline writes the imported firmware, its per-firmware Ghidra/fuzzware projects and the result database, so 64 GB of free storage is a reasonable floor for the verification runs and 200 GB for a campaign over all 4,571 images.
+The full evaluation (4,571 firmware samples, three fuzzers, one hour of fuzzing per firmware in three independent runs) is sized for the configuration given in the artifact appendix, on which it completes in roughly two to three weeks:
+
+- CPU: x86-64 with at least 64 cores
+- Memory: at least 100 GB of RAM
+- Parallelism: at least 32 concurrent fuzzing instances
+- Storage: at least 2 TB of free space for the firmware, the intermediate testing files, the trace files, the logs and the fuzzing results
+
+Smaller machines are sufficient for functional validation. The artifact itself is modest: the container image is 7.9 GB, and the sample set distributed through Google Drive occupies 1.6 GB in the pipeline's stripped form.
 - The sample set published on Google Drive is the 4,571 `ARM:LE:32:v8T` raw-binary firmware images this evaluation uses (stages 1–3). It is distributed in the offset-stripped form and occupies 1.6 GB on disk; `evaluation_samples/restore_original.py` expands it to the 27.7 GB (25.8 GiB) of original firmware. Only 334 of the images are stored stripped (they restore to 26.6 GB); the other 4,237 are already in their original form and account for 1.1 GB. This is the evaluation subset, not the 47 GB / 19,011-image library on the reference server, which additionally holds other architectures and formats.
 - For small-scale smoke testing, the five sample ARM firmware files selected by `scripts/quickstart.sh` require only 231 KB.
 
 ### A.2.3 Software Dependencies
 
-- A Linux environment (tested on Ubuntu 24.04 LTS). Docker 24+ with docker compose v2 is required for the containerized workflow.
-- For host-side operations (outside the container): Python 3.10+, Git 2.40+, and network access to GitHub and Docker Hub for the first build.
+- A Linux host (tested on Ubuntu 24.04 LTS), Docker 24+ and Docker Compose v2. Git 2.40+ and Python 3.10+ are used by the host-side setup scripts. Network access to GitHub and Docker Hub is needed for the first image build.
+- The remaining dependencies — Ghidra, JDK, PostgreSQL, the Python environments, Rust and the tool-specific libraries — are installed inside the provided Docker environment (see A.8).
 
 ### A.2.4 Benchmarks
 
@@ -112,9 +119,9 @@ evaluation_framework/scripts/up.sh                       # start the container, 
 
 ### A.3.5 Obtaining firmware samples
 
-The evaluated firmware sample set is hosted on Google Drive:
-
-> **Sample set download URL: `<to be filled in>`**
+The evaluated firmware sample set is hosted in a reviewer-only Google Drive folder. Its URL is
+given in the artifact appendix and is deliberately not reproduced here — the firmware binaries are
+not redistributed through this repository (A.6).
 
 The folder contains the whole `evaluation_samples/` tree — `firmware/` (all 4,571 corpus images, `<id>.bin`), `offsets/` (the per-image segment mappings), `original_md5.csv`, `offset_dump.tsv`, `stripped_ids.txt`, `restore_original.py` and `scripts/`. Download it and extract the contents into `evaluation_samples/` (that directory is bind-mounted to `/data/samples` inside the container).
 
@@ -181,9 +188,7 @@ The 23 firmware images behind §V of the paper ship in `evaluation_samples/empir
 
 ```bash
 # the 23 images are already in place; their import list ships as
-
-# the 23-entry list ships as evaluation_results/generated/import_list_verify.json;
-# regenerate it from the extracted images if needed:
+# evaluation_results/generated/import_list_verify.json — regenerate it if needed:
 python3 -c "import json,pathlib; p=pathlib.Path('evaluation_samples/empirical_study_samples'); \
 print(json.dumps({'entries':[{'path':f'empirical_study_samples/{f.name}'} for f in sorted(p.glob('*.bin'))]},indent=2))" \
   > evaluation_results/generated/import_list_verify.json
@@ -197,48 +202,41 @@ docker exec -i largerehosting_akiba bash -lc 'cd /home/akiba/akiba_framework && 
 evaluation_framework/scripts/run_pipeline.sh --fuzz-time 2m   # 01 → 03 → 04 → 05 → 06 → 06b → 02
 ```
 
-Each stage writes its database table (exported to `evaluation_results/db/<table>.csv`) and its logs (`evaluation_results/logs/<stage>.log`). The pipeline produces four stages of results:
+Step-by-step documentation — the tool each step drives, the command that starts it, the table it
+writes and the log it leaves — lives in **`evaluation_framework/README.md`, section "Step by step"**.
+The mapping to the paper's stages, its experiments, and the canonical result files:
 
-### Stage 1 — Reconnaissance: base-address and entry-point recovery
+| paper stage | experiment | steps (configs) | result tables | canonical results |
+|---|---|---|---|---|
+| Stage 1 — Reconnaissance | E1: recovery and verification of base addresses and entry points | `00_import`, `00b_analyze`, `01_firmxray`, `02_firmline` | `firmxray_results`, `firmline_results` | `evaluation_results/stage_1.csv` |
+| Stage 2 — Emulation | E2: whether firmware passing reconnaissance can be initialized by the emulation tools | `02b_admission`, plus the `FuzzwareGateway` task of `03`–`05` | `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results` | `evaluation_results/stage_2.csv` |
+| Stage 3 — Security Testing | E3: fuzzing applicability and effectiveness (coverage, crashes, hangs) | fuzzing tasks of `03_fuzzware`, `04_hoedur`, `05_multifuzz`, plus crash replay and statistics | `firmxray_on_fuzzware_results`, `firmxray_fuzzware_replay_crashes`, `hoedur_fuzz_results`, `hoedur_statistics_results`, `multifuzz_results` | `evaluation_results/stage_3.csv` |
+| Stage 4 — Diagnosis | E4: post-fuzzing diagnosis with FirmRCA and manual validation | `06_firmrca`, `06b_firmrca_classify` | `firmrca_results`, `firmrca_classified_results` | `evaluation_results/stage_4.csv` |
 
-*Recovered base addresses and entry points, configuration-verification results, and problem categories for failed verification.*
+Expected effort, taken from the artifact appendix and included in the single pipeline run: E1 ≈ 10
+human-minutes + 10 compute-hours, E2 ≈ 10 human-minutes + 7 compute-hours, E3 ≈ 20 human-minutes +
+tool-dependent multi-day compute time, E4 ≈ 10–30 human-minutes + 10–15 compute-hours. With the
+recommended hardware the three one-hour runs per firmware are sized as follows:
 
-- Module: `org.iotsplab.akiba.process.FirmXRay`
-- Output: `firmxray_results` (base_address, entry_valid)
-- Config: `evaluation_framework/pipeline_configs/01_firmxray.json`
-- The enhanced FirmXRay variant returns -1 for base addresses it cannot determine, producing the "failed" cases that are categorized.
+| Tool | Samples | Workers | Est. time |
+|---|---|---|---|
+| Fuzzware | 1,471 | 16 | 79 h (3.3 d) |
+| GDMA | 1,462 | 16 | 79 h (3.3 d) |
+| Hoedur | 1,485 | 24 | 56 h (2.3 d) |
+| MultiFuzz | 1,499 | 48 | 32 h (1.3 d) |
 
-### Stage 2 — Emulation: initialization, configuration and seed admission
+i.e. ≈17,751 fuzzing instance-hours across the four campaigns. The canonical results show that
+1,580 of the 4,571 firmware samples (34.5%) can be successfully fuzzed by at least one evaluated
+tool, with an average code coverage of ≈10%; the artifact also reports the corresponding crash and
+hang results. Exact coverage and crash counts vary between reruns because fuzzing is
+nondeterministic — the supplied `stage_*.csv` files are the canonical comparison.
 
-*For each tool-firmware combination: the initialization results, the used seeds, and problem categories for unsuccessful cases.*
-
-- Modules: `FuzzwareGateway` + (tool-specific fuzzer module)
-- Configs: `evaluation_framework/pipeline_configs/03_fuzzware.json`, `evaluation_framework/pipeline_configs/04_hoedur.json`, `evaluation_framework/pipeline_configs/05_multifuzz.json`
-- Output tables: `firmxray_on_fuzzware_results`, `hoedur_fuzz_results`, `multifuzz_results`
-- The gateway module prepares per-firmware fuzzware projects; unreliable firmwares where FirmXRay did not return a base address are skipped.
-
-### Stage 3 — Security Testing: fuzzing results
-
-*For each tool-firmware combination: the fuzzing results, including coverage, deduplicated crash counts, and problem categories for unsuccessful cases.*
-
-- Output tables: `firmxray_on_fuzzware_replay_results` (view `firmxray_fuzzware_replay_crashes`), `hoedur_statistics_results`, `multifuzz_results`
-- Coverage computed by `FuzzwareStat` module (`firmxray_on_fuzzware_stat_results`)
-
-### Stage 4 — Diagnosis: FirmRCA results and manual verification
-
-*Diagnostic outputs from FirmRCA and the corresponding manual verification results.*
-
-- Pass 1 (classifiedMode: false): For crash inputs with basic_block_cov >= 0.1, runs backward taint analysis → `firmrca_results`
-- Pass 2 (classifiedMode: true): Classification over selected inputs → `firmrca_classified_results`
-
-### Exporting results
+Results are exported with:
 
 ```bash
-evaluation_framework/scripts/export_results.sh                     # database tables → evaluation_results/db/*.csv
+evaluation_framework/scripts/export_results.sh                     # tables and views -> evaluation_results/db/*.csv
 evaluation_framework/scripts/export_results.sh --with-artifacts    # + per-firmware work trees
 ```
-
-The `evaluation_results/stage_*.csv` files contain the paper's published results.
 
 ## A.5 Empirical Study Details
 
