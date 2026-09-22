@@ -67,7 +67,10 @@ wraps.
   equivalent
 - writes: `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results`
   (`result`, `detail`) · log: `logs/02b_02b_admission.log`
-- cost: the whole `fuzzware pipeline` runs per firmware and nothing bounds it — the fuzzing budget
+- status: provisional — the module parses `[ADMISSION]` lines that the fuzzware revision pinned
+  here does not emit, so the stage currently degrades into a full fuzzing run. See the status note
+  in `docs/pipeline.md`; the reference server reports ~30 s per firmware with its own fuzzware build
+- cost (when the fuzzware support is in place): the whole `fuzzware pipeline` runs per firmware and nothing bounds it — the fuzzing budget
   of `03`–`05` (`maxTimeout`, `--fuzz-time`) does not apply here. It is iterative (fuzz → regenerate
   traces → refine the MMIO model → fuzz again), so expect hours per handful of firmwares and a
   verdict only when each pipeline exits; narrow the constraint to check the stage quickly
