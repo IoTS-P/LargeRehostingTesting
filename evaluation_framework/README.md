@@ -67,7 +67,11 @@ wraps.
   equivalent
 - writes: `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results`
   (`result`, `detail`) · log: `logs/02b_02b_admission.log`
-- cost: one `fuzzware pipeline` per firmware, i.e. roughly a fuzzing run
+- cost: the whole `fuzzware pipeline` runs per firmware and nothing bounds it — the fuzzing budget
+  of `03`–`05` (`maxTimeout`, `--fuzz-time`) does not apply here. It is iterative (fuzz → regenerate
+  traces → refine the MMIO model → fuzz again), so expect hours per handful of firmwares and a
+  verdict only when each pipeline exits; narrow the constraint to check the stage quickly
+  (`docs/pipeline.md` has the measurements)
 
 ### `03_fuzzware` — Fuzzware fuzzing (Stage 3 Security Testing)
 
