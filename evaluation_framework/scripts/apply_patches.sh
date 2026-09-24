@@ -129,7 +129,6 @@ ADMISSION_PATCHES=(
   "evaluated_tools_and_configurations/patches/admission-fuzzware.pipeline.patch:evaluated_tools_and_configurations/tools/fuzzware"
   "evaluated_tools_and_configurations/patches/admission-gdma.__init__.patch:evaluated_tools_and_configurations/tools/gdma"
   "evaluated_tools_and_configurations/patches/admission-gdma.pipeline.patch:evaluated_tools_and_configurations/tools/gdma"
-  "evaluated_tools_and_configurations/patches/admission-hoedur.input.patch:evaluated_tools_and_configurations/tools/hoedur"
   "evaluated_tools_and_configurations/patches/admission-hoedur.modeling.patch:evaluated_tools_and_configurations/tools/hoedur"
   "evaluated_tools_and_configurations/patches/admission-hoedur.lib.patch:evaluated_tools_and_configurations/tools/hoedur"
   "evaluated_tools_and_configurations/patches/admission-hoedur.runner.patch:evaluated_tools_and_configurations/tools/hoedur"
