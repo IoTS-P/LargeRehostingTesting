@@ -1,0 +1,493 @@
+--- tools/gdma/pipeline/fuzzware_pipeline/__init__.py	2026-09-20 12:27:58.397260600 +0800
++++ /tmp/admission_extract/fuzzware-gdma/__init__.py	2026-04-17 16:20:47.367272600 +0800
+@@ -6,9 +6,7 @@
+ import subprocess
+ import sys
+ import time
+-from datetime import datetime, timezone
+-
+-from tqdm import tqdm
++from datetime import datetime
+ 
+ from . import naming_conventions as nc
+ from .logging_handler import logging_handler
+@@ -17,10 +15,10 @@
+                                  config_for_input_path, default_base_input_dir,
+                                  extra_args_for_config_path,
+                                  find_modeling_venv, fuzzer_dirs_for_main_dir,
++                                 input_paths_for_fuzzer_dir, input_paths_for_main_dir,
+                                  job_timings_file_path, latest_main_dir,
+                                  main_dirs_for_proj, project_base,
+-                                 trace_paths_for_main_dir,
+-                                 PIPELINE_DIRNAME_DMA_SNIPPETS)
++                                 trace_paths_for_input, trace_paths_for_main_dir, valid_basic_block_list_path_for_proj)
+ from .util.config import load_extra_args, parse_extra_args
+ from .util.eval_utils import (collect_covered_basic_blocks, valid_bbs_for_proj,
+                                 find_traces_covering_all, resolve_all)
+@@ -83,7 +81,7 @@
+         logger.error(f"Did not recognize the following arguments: {leftover_args}")
+         exit(1)
+ 
+-def resolve_projdir(projdir=None):
++def resolve_projdir(projdir):
+     if projdir is None:
+         projdir = project_base(os.curdir)
+         if projdir is None:
+@@ -95,6 +93,8 @@
+         logger.error("Project directory does not exist or not in a project directory")
+         exit(1)
+ 
++    logger.info(f"Got projdir: {projdir:}")
++
+     return projdir
+ 
+ def parse_int_ranges_from_comma_separated_string(cmd_arg):
+@@ -212,7 +212,7 @@
+     while keep_going:
+         keep_going = False
+         for input_path in files_in_dir(base_input_dir) + [binary_path]:
+-            emu_output = str(run_target(outpath, input_path, ["-v", "--print-fork-child-output"], get_output=True, silent=True))
++            emu_output = str(run_target(outpath, input_path, ["-v"], get_output=True, silent=True))
+             crash_addr = segfault_addr_from_emu_output(emu_output)
+             if crash_addr not in crash_addresses and crash_addr is not None:
+                 logger.info(f"Got crashing address. Input: {input_path}. Crash address: 0x{crash_addr:08x}")
+@@ -236,44 +236,16 @@
+ 
+     check_leftover_args(leftover_args)
+ 
+-    is_default_target_dir = args.target_dir is None
+-    if is_default_target_dir:
+-        args.target_dir=os.path.abspath(os.curdir)
+-
+-    if args.config is None:
+-        # No full config path given, use default value for target directory
+-        config_base_dir = os.path.abspath(args.target_dir)
+-        args.config = os.path.join(config_base_dir, args.runtime_config_name)
+-    else:
+-        # Sanity check that any target dir, if non-default, matches the config
+-        args.config = os.path.abspath(args.config)
+-        config_base_dir = os.path.dirname(args.config)
+-
+-        if not is_default_target_dir and os.path.abspath(args.target_dir) != config_base_dir:
+-            logger.error(f"Invalid argument: Target directory is specified, but does not match the '-c' argument. Did you intend to specify an output directory via '-o'?")
+-            exit(1)
+-
+-    if not os.path.isfile(args.config):
+-        logger.error(f"Invalid argument: Config yaml file '{args.config}' does not exist or is no file!")
++    if not os.path.exists(args.target_dir):
++        logger.error("Target directory '{}' does not exist".format(args.target_dir))
+         exit(1)
+ 
+-    if args.out is None:
+-        # If no --out is specified, use the target directory
+-        args.out = os.path.join(config_base_dir, args.project_name)
+-    args.out = os.path.abspath(args.out)
+-
+-    if not os.path.exists(os.path.dirname(args.out)):
+-        logger.error(f"The parent directory of the output project directory '{args.out}' does not exist!")
+-        exit(1)
++    logger.info(f"Executing pipeline at {datetime.now()}")
++    logger.info(f"Got projdir: {args.target_dir}")
+ 
+-    logger.info( "===================================================")
+-    logger.info(f"Executing pipeline at {datetime.now(timezone.utc)}")
+-    logger.info(f"Using config: {args.config}")
+-    logger.info(f"Got output project directory: {args.out}")
+-    logger.info( "===================================================\n")
+ 
+     if args.base_inputs is None:
+-        args.base_inputs = os.path.join(config_base_dir, "base_inputs")
++        args.base_inputs = os.path.join(args.target_dir, "base_inputs")
+     if os.path.isdir(args.base_inputs):
+         logger.info("Found 'base_inputs' dir in target directory, using that as base input")
+     else:
+@@ -283,15 +255,11 @@
+             logger.error("Could not find any base inputs directory.")
+             exit(1)
+ 
+-    if args.dma_in_python or args.dma_snippet_summary_in_python:
+-        args.dma = True
+-        args.dma_snippet_format = "yaml"
+-
+     logger.info("Performing initial tests")
+     check_cpu_availability(args.num_local_fuzzer_instances)
+ 
+-    if args.skip_afl_cpufreq:
+-        os.environ['AFL_SKIP_CPUFREQ'] = "1"
++
++    os.environ['AFL_SKIP_CPUFREQ'] = "1"
+     # Fuzzware does not crash the emulator process, disable warning
+     os.environ['AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES'] = "1"
+ 
+@@ -302,7 +270,19 @@
+     timeout_seconds = sum(x * int(t) for x, t in zip([1, 60, 3600, 24*3600], reversed(args.run_for.split(":"))))
+ 
+     status = 0
+-    pipeline = Pipeline(args.config, args.out, args.base_inputs, args.num_local_fuzzer_instances, args.disable_modeling, write_worker_logs=not args.silent_workers, do_full_tracing=args.full_traces, timeout_seconds=timeout_seconds, use_aflpp=args.aflpp, milestone_limit=args.milestone_limit, detect_dma=args.dma, detect_dma_in_python=args.dma_in_python, summarize_dma_snippets_in_python=args.dma_snippet_summary_in_python, dma_snippet_format=args.dma_snippet_format)
++    pipeline = Pipeline(
++            args.target_dir, 
++            args.project_name, 
++            args.base_inputs, 
++            args.num_local_fuzzer_instances, 
++            args.disable_modeling, 
++            write_worker_logs=not args.silent_workers, 
++            do_full_tracing=args.full_traces, 
++            config_name=args.runtime_config_name, 
++            timeout_seconds=timeout_seconds, 
++            use_aflpp=args.aflpp,
++            detect_dma=args.dma
++        )
+ 
+     try:
+         if timeout_seconds != 0:
+@@ -391,28 +371,6 @@
+     sys.argv.remove(MODE_MODEL)
+     subprocess.call([modeling_script_path] + sys.argv[1:])
+ 
+-MODE_MODEL_DMA = 'model-dma'
+-def do_model_dma(args, leftover_args):
+-    from .workers.dma_detect import batch_gen_dma_snippets
+-
+-    assert not leftover_args, f"Got unknown leftover command-line arguments: {leftover_args}"
+-
+-    project_path = resolve_projdir(args.projdir)
+-
+-    do_log_progress = sys.stdout.isatty()
+-    force_overwrite = not args.skip_existing
+-    quiet = (not args.verbose) and (not args.debug)
+-    use_python_version = args.use_python_version
+-    use_python_for_summary = args.use_python_version_for_summary
+-    snip_format = args.dma_snippet_format
+-
+-    if use_python_version or use_python_for_summary:
+-        if snip_format != "yaml":
+-            logger.error("Python versions only support the 'yaml' snippet format.")
+-            exit(1)
+-
+-    batch_gen_dma_snippets(projdir=project_path, snipdir_postfix=args.snipdir_postfix, snip_format=snip_format, force_overwrite=force_overwrite, log_progress=do_log_progress, num_procs=args.num_instances, use_python_version=use_python_version, use_python_summary=use_python_for_summary, quiet=quiet, debug=args.debug)
+-
+ def existing_path(path):
+     if not os.path.exists(path):
+         raise argparse.ArgumentTypeError("Path '{}' does not exist".format(path))
+@@ -434,7 +392,6 @@
+         project_path = args.projdir
+     else:
+         project_path = resolve_projdir(args.input if os.path.exists(args.input) else None)
+-    logger.info(f"Using projdir: {project_path:}")
+ 
+     logger.info(f"Executing replay at {datetime.now()}")
+     if args.log:
+@@ -454,27 +411,7 @@
+         else:
+             args.input = trace_paths[0]
+ 
+-    proj_rel_input_path = os.path.join(project_path, args.input)
+-    if os.path.isfile(args.input) or os.path.isfile(proj_rel_input_path):
+-        # We got a trace or input file
+-        if not os.path.isfile(args.input):
+-            args.input = proj_rel_input_path
+-
+-        directory, _ = os.path.split(os.path.realpath(args.input))
+-        if directory.endswith(nc.SESS_DIRNAME_QUEUE) or directory.endswith(nc.SESS_DIRNAME_CRASHES):
+-            # input filename, just re-use this file
+-            input_path = args.input
+-        elif directory.endswith(nc.SESS_DIRNAME_TEMP_MINIMIZATION) or directory.endswith(nc.SESS_DIRNAME_BASE_INPUTS):
+-            # input from base directory
+-            input_path = args.input
+-            config_path = os.path.join(directory, "..", "config.yml")
+-        elif os.path.split(directory)[1].startswith(nc.SESS_DIRNAME_TRACES):
+-            # trace filename, need to translate to input file path
+-            input_path = input_for_trace_path(args.input)
+-        else:
+-            logger.error("Input path needs to be either an input or a trace file")
+-            exit(1)
+-    else:
++    if not os.path.exists(args.input):
+         # We are dealing with a queue/crash input name or an input id instead. Look at fuzzer and main ids
+         main_id, fuzzer_id = main_and_fuzzer_number(os.curdir)
+ 
+@@ -520,7 +457,22 @@
+             logger.error("Could not find input for '{}' in {}".format(input_id, fuzzer_dir))
+             exit(1)
+         logger.info("Found input path: {}".format(input_path))
+-
++    else:
++        # We got a trace or input file
++        directory, _ = os.path.split(os.path.realpath(args.input))
++        if directory.endswith(nc.SESS_DIRNAME_QUEUE) or directory.endswith(nc.SESS_DIRNAME_CRASHES):
++            # input filename, just re-use this file
++            input_path = args.input
++        elif directory.endswith(nc.SESS_DIRNAME_TEMP_MINIMIZATION) or directory.endswith(nc.SESS_DIRNAME_BASE_INPUTS):
++            # input from base directory
++            input_path = args.input
++            config_path = os.path.join(directory, "..", "config.yml")
++        elif os.path.split(directory)[1].startswith(nc.SESS_DIRNAME_TRACES):
++            # trace filename, need to translate to input file path
++            input_path = input_for_trace_path(args.input)
++        else:
++            logger.error("Input path needs to be either an input or a trace file")
++            exit(1)
+     if config_path is None:
+         config_path = config_for_input_path(input_path)
+ 
+@@ -601,7 +553,6 @@
+ MODE_COV = 'cov'
+ COV_FORMAT_PLAIN = 'plain'
+ COV_FORMAT_CARTOGRAPHER = 'cartographer'
+-COV_FORMAT_CARTOGRAPHER_SHORT = 'carto'
+ def do_cov(args, leftover_args):
+     from fuzzware_harness.util import (load_config_deep, parse_symbols,
+                                         closest_symbol)
+@@ -610,8 +561,6 @@
+     check_leftover_args(leftover_args)
+ 
+     projdir = resolve_projdir(args.projdir)
+-    if args.verbose:
+-        logger.info(f"Using projdir: {projdir:}")
+ 
+     # If we are searching crashes, make sure such traces exist
+     if args.crashes:
+@@ -655,11 +604,7 @@
+     if user_defined_basic_blocks:
+         # User-provided symbols / basic blocks
+         specific_bbs = list(bb & ~1 for bb in resolve_all(symbols, user_defined_basic_blocks))
+-        if args.verbose:
+-            print("Resolved basic block addresses: {}".format(",".join(map(hex, specific_bbs))))
+-        if len(specific_bbs) != len(user_defined_basic_blocks):
+-            print(f"[ERROR] could not resolve all basic block symbols", file=sys.stderr)
+-            exit(1)
++        print("Resolved basic block addresses: {}".format(",".join(map(hex, specific_bbs))))
+ 
+         # User-provided symbols / basic blocks to skip
+         if args.exclude:
+@@ -672,20 +617,14 @@
+ 
+         if trace_paths:
+             working_directory = os.getcwd()
++            print(f"\nFound {len(trace_paths):d} inputs covering all specified addresses:")
+             for i, path in enumerate(trace_paths):
+-                if args.verbose:
+-                    print(f"{i+1:d}. ", end="", flush=True)
+-                p = Path(nc.input_for_trace_path(path))
+-                if p.is_relative_to(working_directory):
+-                    print(f"{p.relative_to(working_directory)}")
+-                else:
+-                    print(f"{p.resolve()}")
++                print(f"{i+1:d}. {Path(nc.input_for_trace_path(path)).relative_to(working_directory)}")
+         else:
+-            print("Could not find any traces (after skipping) that cover all requested bbs...", file=sys.stderr)
+-            exit(2)
++            print("Could not find any traces (after skipping) that cover all requested bbs...")
+     else:
+         # By default, if no specific basic blocks are given, show information about symbols
+-        symbol_bbs = set(bb & ~1 for bb in addr_to_sym)
++        symbol_bbs = set(bb & ~1 for bb in symbols.values())
+ 
+         covered_bbs = collect_covered_basic_blocks(projdir, only_last_maindir=not args.all_main_dirs, crashes=args.crashes)
+         if valid_bbs:
+@@ -696,7 +635,7 @@
+             logger.debug(f"Writing covered basic blocks to {args.outfile}")
+             if args.out_format == COV_FORMAT_PLAIN:
+                 dump_cov_plain(covered_bbs, args.outfile)
+-            elif args.out_format in (COV_FORMAT_CARTOGRAPHER, COV_FORMAT_CARTOGRAPHER_SHORT):
++            elif args.out_format == COV_FORMAT_CARTOGRAPHER:
+                 dump_cov_cartographer(covered_bbs, args.outfile)
+             else:
+                 logger.error(f"Unknown coverage outfile format '{args.out_format}'")
+@@ -707,7 +646,7 @@
+                 print("\n====== Found Symbols ======")
+                 for bb in sorted(symbol_bbs & covered_bbs):
+                     print(f"{bb:#010x} ({addr_to_sym.get(bb)})")
+-
++    
+                 print("\n====== Not Found Symbols ======")
+                 for bb in sorted(symbol_bbs - covered_bbs):
+                     print(f"{bb:#010x} ({addr_to_sym.get(bb)})")
+@@ -739,9 +678,7 @@
+     ("bb", nc.PREFIX_BASIC_BLOCK_TRACE), ("bbl", nc.PREFIX_BASIC_BLOCK_TRACE),
+     ("mmioset", nc.PREFIX_MMIO_SET),
+     ("bbset", nc.PREFIX_BASIC_BLOCK_SET), ("bblset", nc.PREFIX_BASIC_BLOCK_SET),
+-    ("bbhash", nc.PREFIX_BASIC_BLOCK_HASH), ("bblhash", nc.PREFIX_BASIC_BLOCK_HASH),
+-    ("int", nc.PREFIX_INTERRUPT_TRACE), ("interrupt", nc.PREFIX_INTERRUPT_TRACE),
+-    ("dma", nc.PREFIX_DMA_TRACE),
++    ("bbhash", nc.PREFIX_BASIC_BLOCK_HASH), ("bblhash", nc.PREFIX_BASIC_BLOCK_HASH)
+ )
+ 
+ MODE_GENTRACES = 'gentraces'
+@@ -751,13 +688,12 @@
+     check_leftover_args(leftover_args)
+ 
+     projdir = resolve_projdir(args.projdir)
+-    logger.info(f"Using projdir: {projdir:}")
+ 
+     if args.all:
+         args.trace_types = [ "all" ]
+         args.fuzzers=args.main_dirs="all"
+     if args.trace_types[0] == "all":
+-        args.trace_types = [ "mmio", "ram", "bb", "bbset", "mmioset", "bbhash", "int", "dma" ]
++        args.trace_types = [ "mmio", "ram", "bb", "bbset", "mmioset", "bbhash" ]
+     if args.main_dirs == "all":
+         args.main_dirs = ",".join(list(map(str, range(1, len(list(main_dirs_for_proj(projdir)))+1))))
+     elif args.main_dirs == "latest":
+@@ -782,41 +718,26 @@
+     print(f"Got trace types: {trace_types}")
+     print(f"Got trace prefixes: {required_trace_prefixes}")
+ 
+-    if args.force_slow_tracing and not args.force_process_per_input:
+-        print("[WARNING] Forcing slow Python-based traces disables the forkserver option. Setting --force-process-per-input")
+-        args.force_process_per_input = True
+-
+     # Check whether we will be using native tracing
+     # We will collect the data a bit differently as a consequence
+-    can_use_forkserver = False
+-    if not args.force_process_per_input:
+-        can_use_forkserver = all(prefix in nc.NATIVE_TRACE_FILENAME_PREFIXES for prefix in required_trace_prefixes)
++    can_use_native_batch = all(prefix in nc.NATIVE_TRACE_FILENAME_PREFIXES for prefix in required_trace_prefixes)
+ 
+     project_main_dirs = main_dirs_for_proj(projdir)
+ 
+     print(f"[*] Need to process {len(main_dir_nums)} main director{'y' if len(main_dir_nums)==1 else 'ies'}.")
+-    if can_use_forkserver:
+-        print("[+] Using forkserver mode as only supported traces are to be generated")
++    if can_use_native_batch:
++        print("[+] Using native batch mode as only natively supported traces are to be generated")
+     else:
+-        print(f"[*] We need a process per trace. This could take a while...")
+-
+-    log_progress = sys.stdout.isatty()
++        print(f"[*] We need non-native traces. This could take a while...")
+ 
+-    num_traces = 0
+-    start_time = time.time()
+-    it = main_dir_nums
+-    if log_progress:
+-        it = tqdm(it, total=len(main_dir_nums), desc="Maindirs")
+-    for main_dir_num in it:
++    for main_dir_num in main_dir_nums:
+         if main_dir_num > len(project_main_dirs):
+             break
+ 
+         main_dir = project_main_dirs[main_dir_num-1]
+ 
+-        num_traces += gen_missing_maindir_traces(main_dir, required_trace_prefixes, tracedir_postfix=args.tracedir_postfix, log_progress=log_progress, verbose=args.verbose, crashing_inputs=args.crashes, num_emulators=args.num_instances, force_process_per_input=args.force_process_per_input, force_slow_tracing=args.force_slow_tracing)
+-    end_time = time.time()
+-
+-    print(f"Generating the {num_traces} traces took {round(end_time - start_time, 2)} seconds!")
++        print(f"Generating traces for main directory {main_dir}")
++        gen_missing_maindir_traces(main_dir, required_trace_prefixes, tracedir_postfix=args.tracedir_postfix, log_progress=True, verbose=args.verbose, crashing_inputs=args.crashes, num_emulators=args.num_instances)
+ 
+ MODE_GENSTATS = 'genstats'
+ STATNAME_COV, STATNAME_MMIO_COSTS, STATNAME_MMIO_OVERHEAD_ELIM = 'coverage', 'modeling-costs', 'mmio-overhead-elim'
+@@ -827,7 +748,6 @@
+ ]
+ def do_genstats(args, leftover_args):
+     from .util.config import load_config_deep
+-    from fuzzware_harness.util import parse_symbols
+     from .workers.tracegen import gen_all_missing_traces
+     from .util import eval_utils
+     from .output_conventions import \
+@@ -836,10 +756,8 @@
+     check_leftover_args(leftover_args)
+ 
+     projdir = resolve_projdir(args.projdir)
+-    logger.info(f"Using projdir: {projdir:}")
+     latest_config_path = config_file_for_main_path(main_dirs_for_proj(projdir)[-1])
+     config_map = load_config_deep(latest_config_path)
+-    symbols, _ = parse_symbols(config_map)
+ 
+     if args.all:
+         args.stats = KNOWN_STATNAMES
+@@ -892,7 +810,7 @@
+             exit(1)
+ 
+         if os.path.exists(args.milestone_bb_file):
+-            milestone_bbs = parse_milestone_bb_file(args.milestone_bb_file, symbols)
++            milestone_bbs = parse_milestone_bb_file(args.milestone_bb_file, self.symbols)
+             not_yet_found_milestone_bbs = set(milestone_bbs)
+ 
+         logger.info("Generating missing basic block set traces, if any")
+@@ -1051,9 +969,6 @@
+     parser_modeling = subparsers.add_parser(MODE_MODEL, help="Run the modeling component in separation. Mostly a testing feature for development purposes.", add_help=False)
+     parser_modeling.set_defaults(func=do_model)
+ 
+-    parser_dma_modeling = subparsers.add_parser(MODE_MODEL_DMA, help="Run the DMA modeling component in separation. Mostly a testing feature for development purposes.")
+-    parser_dma_modeling.set_defaults(func=do_model_dma)
+-
+     parser_replaytest = subparsers.add_parser(MODE_REPLAYTEST, help="Checks consistency of fuzzware replay for a given fuzzware project. Mostly a testing feature for develoment purposes.")
+     parser_replaytest.set_defaults(func=do_replaytest)
+ 
+@@ -1064,10 +979,9 @@
+     parser_check.set_defaults(func=do_checkenv)
+ 
+     # Pipeline command-line arguments
+-    pipeline_group_config_arguments = parser_pipeline.add_mutually_exclusive_group()
+-    pipeline_group_config_arguments.add_argument('-c', '--config', '--runtime-config', dest="config", default=None, help=f"Main config yaml file. Defaults to './{nc.SESS_FILENAME_CONFIG}'.")
+-    pipeline_group_output_arguments = parser_pipeline.add_mutually_exclusive_group()
+-    pipeline_group_output_arguments.add_argument('-o', '--out', default=None, help=f"Path to project directory to be created. This requires the parent directory to exist. Defaults to '<target_dir>/{nc.DEFAULT_PROJECT_NAME}'")
++    parser_pipeline.add_argument('target_dir', nargs="?", type=os.path.abspath, default=os.curdir, help="Directory containing the main config. Defaults to the current working dir.")
++    parser_pipeline.add_argument('--runtime-config-name', default=nc.SESS_FILENAME_CONFIG, help=f"Main config yaml file name relative to target_dir. Defaults to '{nc.SESS_FILENAME_CONFIG}'.")
++    parser_pipeline.add_argument('-p', '--project-name', default=nc.DEFAULT_PROJECT_NAME, help=f"Name of the fuzzing project directory where all the information (input corpus, traces, modeling, ...) regarding the run is stored. Defaults to '{nc.DEFAULT_PROJECT_NAME}'")
+     parser_pipeline.add_argument('-n', '--num-local-fuzzer-instances', default=1, type=int, help="Number of local fuzzer instances to use.")
+     parser_pipeline.add_argument('--base-inputs', default=None, help="Directory containing the initial inputs to be used for fuzzing. If unspecified, uses simple default inputs.")
+     parser_pipeline.add_argument('--run-for', default="00:00:00:00", help="Amount of time to run the pipeline for. Format: DD:HH:MM:SS")
+@@ -1076,15 +990,7 @@
+     parser_pipeline.add_argument('--full-traces', default=False, action='store_true', help="Enable generating full traces instead of only generating the (much smaller) set-based traces.")
+     parser_pipeline.add_argument('--skip-afl-cpufreq', default=False, action='store_true', help="Skip AFL's performance governor check by setting AFL_SKIP_CPUFREQ=1.")
+     parser_pipeline.add_argument('--aflpp', default=False, action="store_true", help="Use AFLplusplus (instead of afl).")
+-    parser_pipeline.add_argument('--milestone-limit', default=None, type=int, help="Fuzzer stops fuzzing after reaching MILESTONE_LIMIT milestones")
+-    parser_pipeline.add_argument('--dma', default=False, action='store_true', help="Enable DMA auto detection (this implies generating full traces, see --full-traces).")
+-    parser_pipeline.add_argument('--dma-snippet-format', default="bin", help="DMA snippet format to use. Choose 'yaml' for easier debugging. Default: 'bin'", choices=("bin", "yaml"))
+-    parser_pipeline.add_argument('--dma-in-python', default=False, action='store_true', help="Use python version for DMA auto detection, instead of native Rust implementation. Implies --dma.")
+-    parser_pipeline.add_argument('--dma-snippet-summary-in-python', default=False, action='store_true', help="Use python version for the part of the DMA auto detection which summarizes DMA snippets, instead of native Rust implementation. Implies --dma.")
+-
+-    pipeline_group_config_arguments.add_argument('--runtime-config-name', default=nc.SESS_FILENAME_CONFIG, help=f"[DEPRECATED] Incompatible with -c. Name of config yaml file, relative to target_dir. Defaults to '{nc.SESS_FILENAME_CONFIG}'.")
+-    pipeline_group_output_arguments.add_argument('-p', '--project-name', default=nc.DEFAULT_PROJECT_NAME, help=f"[DEPRECATED] Incompatible with -o. Name of the fuzzing project directory where all the information (input corpus, traces, modeling, ...) regarding the run is stored. Defaults to '{nc.DEFAULT_PROJECT_NAME}'")
+-    parser_pipeline.add_argument('target_dir', nargs="?", default=None, help="Implied by -c. Directory containing the main config. Defaults to the current working dir.")
++    parser_pipeline.add_argument('--dma', default=False, action='store_true', help="Enable DMA auto detection")
+ 
+     # Bare-bone Fuzzer command-line arguments
+     parser_fuzz.add_argument('out_subdir', help="The output subdirectory name to use.")
+@@ -1102,18 +1008,6 @@
+     # Modeling command-line arguments
+     # No extra emu args as we are passing on parsing to the modeling code
+ 
+-    # DMA Modeling command-line arguments
+-    parser_dma_modeling.add_argument('inputs', nargs="*", help="List of main directories or inputs within main directories to run DMA modeling for", default=None)
+-    parser_dma_modeling.add_argument('-p', '--projdir', help="Fuzzware project directory to run DMA modeling for. Defaults to searching the current working directory for a fuzzware project root.", default=None)
+-    parser_dma_modeling.add_argument('--snipdir-postfix', help=f"(Optional) Directory name postfix for the {PIPELINE_DIRNAME_DMA_SNIPPETS} directory to store the DMA snippets in.", default="")
+-    parser_dma_modeling.add_argument('-n', '--num-instances', default=1, type=int, help="Number of parallel processes to use (defaults to 1 process).")
+-    parser_dma_modeling.add_argument('--skip-existing', action='store_true', default=False, help="Do not re-generate existing snippets.")
+-    parser_dma_modeling.add_argument('-v', '--verbose', action="store_true", default=False, help="Display stdout output of DMA snippet generation.")
+-    parser_dma_modeling.add_argument('--debug', action="store_true", default=False, help="Display full debug output of DMA snippet generation")
+-    parser_dma_modeling.add_argument('--dma-snippet-format', default="bin", help="DMA snippet format to use. Choose 'yaml' for easier debugging. Default: 'bin'", choices=("bin", "yaml"))
+-    parser_dma_modeling.add_argument('--force-python-modeling', dest="use_python_version", action="store_true", default=False, help="Use python for generating DMA snippets instead of the rust-based version.")
+-    parser_dma_modeling.add_argument('--force-python-summarizing', dest="use_python_version_for_summary", action="store_true", default=False, help="Use python for summarizing DMA snippets instead of the rust-based version.")
+-
+     # Replay command-line arguments
+     parser_replay.add_argument('input', help="Either a file path (trace/input) or an input id. For additional arguments to be passed to the emulator, refer to 'fuzzware emu -h'")
+     parser_replay.add_argument('-p', '--projdir', help="Fuzzware project directory to search for inputs in. Defaults to searching the current working directory for a fuzzware project root.", default=None)
+@@ -1133,8 +1027,6 @@
+     parser_gentraces.add_argument('--dryrun', action="store_true", default=False, help="Only list the missing trace files, do not generate actual traces.")
+     parser_gentraces.add_argument('-v', '--verbose', action="store_true", default=False, help="Display stdout output of trace generation.")
+     parser_gentraces.add_argument('-n', '--num-instances', default=1, type=int, help="Number of local emulator instances to use.")
+-    parser_gentraces.add_argument('--force-process-per-input', default=False, action="store_true", help="(SLOW!) Disable the use of the forkserver for trace generation. This is intended for debugging purposes mainly.")
+-    parser_gentraces.add_argument('--force-slow-tracing', default=False, action="store_true", help="(SLOW!) Use the legacy python trace generation. This is intended for debugging purposes mainly. Implies --force-process-per-input.")
+ 
+     # Genstats command-line arguments
+     parser_genstats.add_argument('stats', nargs="*", default=(STATNAME_COV, STATNAME_CRASH_TIMINGS,STATNAME_MMIO_COSTS), help=f"The stats to generate. Options: {','.join(KNOWN_STATNAMES)}. Defaults to '{STATNAME_COV} {STATNAME_CRASH_TIMINGS} {STATNAME_MMIO_COSTS}'.")
+@@ -1157,14 +1049,13 @@
+     parser_cov.add_argument('-p', '--projdir', default=None, help="(Optional) Project directory to search coverage for. If not specified, the current working directory is used.")
+     parser_cov.add_argument('-c', '--syms-config', default=None, help="(Optional) Fuzzware config file containing symbols (a 'symbols' attribute). Will be derived from projdir if not specified.")
+     parser_cov.add_argument('-o', '--outfile', default=None, help="(Optional) Destination file path to dump a set of matching addresses in line-based hex to.")
+-    parser_cov.add_argument('-f', '--out-format', default=COV_FORMAT_PLAIN, help=f"(Optional) Coverage output file format.", choices=(COV_FORMAT_PLAIN, COV_FORMAT_CARTOGRAPHER, COV_FORMAT_CARTOGRAPHER_SHORT))
++    parser_cov.add_argument('--out-format', default=COV_FORMAT_PLAIN, help=f"(Optional) Coverage output file format.", choices=(COV_FORMAT_PLAIN, COV_FORMAT_CARTOGRAPHER))
+     parser_cov.add_argument('--crashes', default=False, action="store_true", help="(Optional) Instead of searching inputs, search coverage of crashes.")
+     parser_cov.add_argument('-e', '--exclude', type=str, default=None, help="(Optional) Comma-separated list of certain symbols/addresses which should not have been hit in the given input. Useful for finding inputs which exhibit specific coverage. Example: 'my_error_func,0x08001234'")
+     parser_cov.add_argument('-s', '--skip-num', type=int, default=0, help="(Optional) Skip the first n matching input files which exhibit the given behavior. Useful to cycle through (and replay) different inputs.")
+     parser_cov.add_argument('-n', '--num-matches', type=int, default=1, help="(Optional) Find n input paths with the desired coverage.")
+     parser_cov.add_argument('--all-main-dirs', default=False, action="store_true", help="(Optional) Search in trace files for all main dirs. Default: Only search the latest main dir.")
+     parser_cov.add_argument('--log', action='store_true', help="Enables logging cov output to logfile (logs/cov.log)")
+-    parser_cov.add_argument('-v', '--verbose', action='store_true', help="Enables more verbose output.")
+ 
+     # Genconfig command-line arguments
+     parser_genconfig.add_argument('binary', help="The binary file for which to generate the configuration. ELF Files and other formats will be unpacked to binary form if such file does not yet exist.")

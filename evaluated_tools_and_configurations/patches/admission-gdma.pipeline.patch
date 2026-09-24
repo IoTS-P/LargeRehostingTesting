@@ -1,0 +1,611 @@
+--- tools/gdma/pipeline/fuzzware_pipeline/pipeline.py	2026-09-20 12:27:58.399504200 +0800
++++ /tmp/admission_extract/fuzzware-gdma/pipeline.py	2026-04-17 16:20:50.402350400 +0800
+@@ -1,9 +1,14 @@
+ import glob
+ import hashlib
++import re
+ import os
+ import queue
+ import shutil
+ import time
++
++import subprocess
++import sys
++
+ from copy import deepcopy
+ from pathlib import Path
+ from queue import Queue
+@@ -11,7 +16,8 @@
+ from fuzzware_harness.globs import (MMIO_HOOK_MMIO_ALL_ADDRS,
+                                     MMIO_HOOK_PC_ALL_ACCESS_SITES)
+ from fuzzware_harness.tracing.serialization import (parse_bbl_set,
+-                                                    parse_mmio_set)
++                                                    parse_mmio_set,
++                                                    parse_mmio_trace)
+ from fuzzware_harness.util import (_merge_dict, load_config_deep,
+                                    parse_address_value, parse_symbols,
+                                    resolve_region_file_paths, closest_symbol)
+@@ -23,27 +29,26 @@
+                     DEFAULT_IDLE_BBL, EVENT_MIN_WAIT, IDLE_BUSYLOOP_SLEEP,
+                     IDLE_COUNT_HOUSEKEEPING, LOOP_COUNT_HOUSEKEEPING,
+                     MAX_NUM_DEAD_FUZZER_RESTARTS, MAX_NUM_MODELS_PER_PC,
+-                    FIRST_STAT_PRINT_DELAY, STAT_PRINT_INTERVAL,
+-                    IDLE_COUNT_DMA_DETECTION, DMA_ANALYSIS_RERUN_TIMEOUT)
++                    FIRST_STAT_PRINT_DELAY, STAT_PRINT_INTERVAL)
+ from .logging_handler import logging_handler
+ from .naming_conventions import *  # pylint: disable=wildcard-import
+-from . import naming_conventions as nc
+ from .observers.new_config_snippet_handler import NewConfigSnippetHandler
+ from .observers.new_mmio_state_handler import NewMmioStateHandler
+-from .run_target import run_target
++from .run_target import run_target, gen_run_arglist
+ from .session import Session
+ from .util.config import (add_config_entries, merge_config_file_into,
+-                          save_config, add_dma_config)
+-from .util.eval_utils import add_input_file_time_entry, parse_valid_bb_file, parse_milestone_bb_file, create_dma_perf_metadata_file
++                          save_config)
++from .util.eval_utils import add_input_file_time_entry, parse_valid_bb_file, parse_milestone_bb_file
+ from .util.trace_inspection import (bbl_set_contains,
+                                     mmio_set_contains_one_context)
+ from .workers.pool import WorkerPool
+-from .dma import is_dma_config_update
+ 
+ logger = logging_handler().get_logger("pipeline")
+ 
+ class Pipeline:
+     # Base configs
++    parent_dir: str
++    name: str
+     base_inputs: str
+     num_main_fuzzer_procs: int
+     booted_bbl: int
+@@ -51,7 +56,6 @@
+     boot_avoided_bbls: set
+     groundtruth_valid_basic_blocks: set
+     groundtruth_milestone_basic_blocks: set
+-    milestone_limit: int
+ 
+     # Runtime state
+     start_time: int
+@@ -62,7 +66,6 @@
+     queue_traces: Queue
+     queue_mmio_states: Queue
+     queue_config_snippets: Queue
+-    queue_dma_config_candidates: Queue
+ 
+     # Pipeline-scoped observer singletons
+     config_snippet_observer: Observer
+@@ -91,10 +94,13 @@
+     warnings_file = None
+     input_creation_times_file = None
+     job_timings_file = None
+-    dma_snipgen_perf_file = None
+     seen_rel_input_paths = set()
+ 
+     @property
++    def base_dir(self):
++        return os.path.join(self.parent_dir, self.name)
++
++    @property
+     def mmio_states_dir(self) -> str:
+         return os.path.join(self.base_dir, PIPELINE_DIRNAME_MMIO_STATES)
+ 
+@@ -107,14 +113,6 @@
+         return os.path.join(self.base_dir, PIPELINE_DIRNAME_STATS)
+ 
+     @property
+-    def dma_snippets_dir(self) -> str:
+-        return os.path.join(self.base_dir, PIPELINE_DIRNAME_DMA_SNIPPETS)
+-
+-    @property
+-    def dma_config_path(self) -> str:
+-        return os.path.join(self.base_dir, PIPELINE_FILENAME_DMA_CFG)
+-
+-    @property
+     def mmio_model_config_path(self) -> str:
+         return os.path.join(self.base_dir, PIPELINE_FILENAME_MMIO_MODEL_CFG)
+ 
+@@ -167,10 +165,6 @@
+         return job_timings_file_path(self.base_dir)
+ 
+     @property
+-    def dma_snipgen_perf_file_path(self) -> str:
+-        return dma_snipgen_perf_file_path(self.base_dir)
+-
+-    @property
+     def input_creation_timings_path(self) -> str:
+         return input_creation_timings_path(self.base_dir)
+ 
+@@ -241,28 +235,96 @@
+         if os.path.exists(milestone_bb_list_path):
+             self.groundtruth_milestone_basic_blocks = parse_milestone_bb_file(milestone_bb_list_path, self.symbols)
+ 
+-    def __init__(self, config_path, project_dir, base_inputs, num_main_fuzzer_procs, disable_modeling=False, write_worker_logs=False, do_full_tracing=False, timeout_seconds=0, use_aflpp=False, milestone_limit=None, detect_dma=False, detect_dma_in_python=False, summarize_dma_snippets_in_python=False, dma_snippet_format="yaml"):
++    def perform_admission_test(self, seed_path):
++        mmio_trace_path = os.path.join(self.base_dir, "admission_mmio_trace.bin")
++        seed_size = os.path.getsize(seed_path)
++
++        instruction_limit = 3000000
++        extra_args = ["-l", str(instruction_limit), "-v", "--mmio-trace-out", mmio_trace_path, "--fuzz-consumption-timeout", "0", "--print-fork-child-output"]
++        cmd = gen_run_arglist(self.base_config_path, extra_args) + [seed_path]
++
++        try:
++            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
++            stdout = (result.stdout or "") + "\n" + (result.stderr or "")
++            exit_code = result.returncode
++        except subprocess.TimeoutExpired:
++            if os.path.exists(mmio_trace_path):
++                os.remove(mmio_trace_path)
++            return False, "TIMEOUT", "Execution exceeded physical time limit (120s)"
++
++        is_main_limit_reached = f"Ran into instruction limit of {instruction_limit}" in stdout
++
++        total_consumed = 0
++        if os.path.exists(mmio_trace_path):
++            try:
++                trace_entries = parse_mmio_trace(mmio_trace_path)
++                total_consumed = sum(entry[6] for entry in trace_entries)
++            except Exception:
++                pass
++            finally:
++                os.remove(mmio_trace_path)
++
++        if "Execution failed with error code" in stdout or "Emulation crashed" in stdout or (exit_code != 0 and not is_main_limit_reached):
++            crash_info = "Unknown Crash"
++
++            detail_match = re.search(r"(\d+: .*?UC_ERR_[A-Z_]+)", stdout)
++
++            uc_err_fallback = re.search(r"UC_ERR_[A-Z_]+", stdout)
++
++            if detail_match:
++                extracted_info = detail_match.group(1).strip("() ")
++                crash_info = "Discovery phase failed (Incomplete config)" if "UC_ERR_OK" in extracted_info else extracted_info
++            elif uc_err_fallback:
++                crash_info = uc_err_fallback.group(0)
++            elif "Execution failed with error code" in stdout:
++                try:
++                    crash_info = stdout.split("Execution failed with error code:")[1].split("\n")[0].strip()
++                except:
++                    crash_info = "Harness error"
++            elif exit_code < 0:
++                import signal
++                try:
++                    crash_info = f"OS_SIGNAL_{signal.Signals(-exit_code).name}"
++                except:
++                    crash_info = f"OS_SIGNAL_{abs(exit_code)}"
++            
++            return False, "CRASH", crash_info
++
++        if is_main_limit_reached:
++            if total_consumed > 0:
++                return True, "NORMAL_LIMIT_REACHED", f"Reached {instruction_limit} limit with {total_consumed} bytes consumed"
++            else:
++                return False, "HANG", f"Reached {instruction_limit} limit with ZERO consumption"
++
++        if exit_code == 0:
++            if total_consumed >= seed_size:
++                return True, "NORMAL_FULL_CONSUMPTION", f"Consumed all {seed_size} bytes"
++            else:
++                return False, "INCOMPLETE_CONSUMPTION", f"Exited normally but only consumed {total_consumed}/{seed_size} bytes"
++
++        return False, "UNKNOWN", "Did not match any criteria"
++
++    def __init__(self, parent_dir, name, base_inputs, num_main_fuzzer_procs, disable_modeling=False, write_worker_logs=False, do_full_tracing=False, config_name=SESS_FILENAME_CONFIG, timeout_seconds=0, use_aflpp=False, detect_dma=False):
+         self.booted_bbl = DEFAULT_IDLE_BBL
+         self.disable_modeling = disable_modeling
++        self.enable_dma_detection = detect_dma
+         self.shutdown_requested = False
+         self.sessions = {}
+-        self.base_config_path = config_path
++        self.parent_dir = parent_dir
++        self.name = name
+         self.num_main_fuzzer_procs = num_main_fuzzer_procs
+         self.generic_inputs_dir = base_inputs
+-        self.enable_dma_detection = detect_dma
+-        self.dma_detection_use_python = detect_dma_in_python
+-        self.dma_detection_use_python_summary = summarize_dma_snippets_in_python
+-        self.dma_snippet_format = dma_snippet_format
+         self.do_full_tracing = do_full_tracing
++        self.num_required_traces = len(SET_TRACE_FILENAME_PREFIXES) if not do_full_tracing else len(TRACE_FILENAME_PREFIXES) - 1
++        self.base_config_path = os.path.join(self.parent_dir, config_name)
+         self.groundtruth_valid_basic_blocks = None
+         self.groundtruth_milestone_basic_blocks = None
+         self.stop_time = None
+         self.use_aflpp = use_aflpp
+-        self.milestone_limit = milestone_limit
+-        self.base_dir = project_dir
+ 
+-        assert Path(self.base_config_path).is_file(), "Configuration file is expected to be an existing file"
+-        assert Path(self.base_dir).parent.is_dir(), "Parent of project directory is expected to be an existing directory"
++        if not os.path.isfile(self.base_config_path):
++            logger.error(f"Could not find config file: {self.base_config_path}. We are probably not in a target directory. Exiting...")
++            exit(1)
+ 
+         self.queue_fuzz_inputs = Queue()
+         self.queue_traces = Queue()
+@@ -271,7 +333,7 @@
+         self.queue_dma_config_candidates = Queue()
+ 
+         self.create_dirs()
+-        self.check_emulator_dry()
++        # self.check_emulator_dry()
+         logger.info("Adding pipeline level observers")
+         self.add_mmio_state_observer()
+         self.add_config_snippets_observer()
+@@ -297,26 +359,54 @@
+         save_config(config_map, new_config_path)
+         assert os.path.isfile(new_config_path)
+ 
+-        self.symbols, self.syms_by_addr = parse_symbols(config_map)
+-        self.default_config_map = config_map
+-
+         # get pre-configured MMIO access contexts from configuration
+         if 'mmio_models' in config_map:
+             for _, entry_list in config_map['mmio_models'].items():
+                 for entry in entry_list.values():
+                     # Skip unexpected / custom entries
+                     try:
+-                        pc = parse_address_value(self.symbols, entry.get('pc', MMIO_HOOK_PC_ALL_ACCESS_SITES))
++                        pc = entry.get('pc', MMIO_HOOK_PC_ALL_ACCESS_SITES)
+                     except AttributeError:
+                         continue
++                    self.mmio_access_contexts.add((pc, entry['addr']))
+                     if pc != MMIO_HOOK_PC_ALL_ACCESS_SITES:
+-                        pc = pc & ~0x1
+                         self.num_models_per_pc[pc] = self.num_models_per_pc.get(pc, 0) + 1
+-                    self.mmio_access_contexts.add((pc, entry['addr']))
+ 
++        self.symbols, self.syms_by_addr = parse_symbols(config_map)
++        self.default_config_map = config_map
+         self.parse_pipeline_yml_config(config_map)
+         self.parse_ground_truth_files()
+ 
++        initial_seeds = glob.glob(os.path.join(self.generic_inputs_dir, "*"))
++        logger.info(f"Starting Admission Test for {len(initial_seeds)} initial seeds...")
++        all_seeds_passed = True
++        
++        for seed in initial_seeds:
++            if os.path.getsize(seed) == 0:
++                logger.info(f"Skipping seed {os.path.basename(seed)} for admission (empty file).")
++                continue 
++
++            is_passed, status, detail = self.perform_admission_test(seed)
++            
++            if is_passed:
++                logger.info(f"[ADMISSION] Seed {os.path.basename(seed)}: PASSED ({status})")
++            else:
++                all_seeds_passed = False
++                if status == "CRASH":
++                    logger.error(f"[ADMISSION] FAILED: Seed {os.path.basename(seed)} CRASHED. Type: {detail}")
++                elif status == "HANG":
++                    logger.error(f"[ADMISSION] FAILED: Seed {os.path.basename(seed)} HANGED. {detail}")
++                else:
++                    logger.error(f"[ADMISSION] FAILED: Seed {os.path.basename(seed)} Reason: {status} ({detail})")
++
++        if not all_seeds_passed:
++            logger.error("Firmware admission test failed on one or more seeds. Terminating pipeline to avoid invalid fuzzing.")
++            sys.exit(1)
++            
++        logger.info("All initial seeds passed admission test. Proceeding to Session 0.")
++        # sys.exit(0)
++
++
+     def request_shutdown(self):
+         logger.info("Shutdown requested!")
+         self.shutdown_requested = True
+@@ -341,13 +431,10 @@
+         os.mkdir(self.logs_dir)
+         os.mkdir(necessary_data_dir(self.base_dir))
+         os.mkdir(self.stats_dir)
+-
+         if self.enable_dma_detection:
+             os.mkdir(self.dma_snippets_dir)
+-
+         self.input_creation_times_file = open(self.input_creation_timings_path, "w")
+         self.job_timings_file = open(self.job_timings_file_path, "w")
+-        self.dma_snipgen_perf_file = create_dma_perf_metadata_file(self.dma_snipgen_perf_file_path)
+ 
+         logger.set_output_file(self.base_dir, 'pipeline')
+         logger.info(f"logging pipeline output to: {logger.output_file}.log")
+@@ -360,11 +447,6 @@
+         self.copy_necessary_files(files_to_copy)
+         return config_map
+ 
+-    # Append milestone basic block to the log file
+-    def milestone_log_append(self, milestone_bb: int):
+-        with open(milestone_log_path_for_proj(self.base_dir), "a") as f:
+-            f.write(f"0x{milestone_bb:08x}\n")
+-
+     # We store the planned run time as well as actual start time
+     def runtime_log_create(self, planned_runtime):
+         with open(runtime_log_path_for_proj(self.base_dir), "w") as f:
+@@ -386,12 +468,11 @@
+     def find_necessary_files(self, config_map):
+         files_to_copy = []
+ 
+-        orig_config_dir = Path(self.base_config_path).parent
+         # Copy ground truth files such as a basic block valid list or checkpoints
+         for filename in STATS_GROUND_TRUTH_FILES:
+-            groundtruth_file_path = Path(self.base_config_path).parent.joinpath(filename)
+-            if groundtruth_file_path.exists():
+-                files_to_copy.append(str(groundtruth_file_path))
++            valid_bbs_path = Path(self.base_config_path).parent.joinpath(filename)
++            if valid_bbs_path.exists():
++                files_to_copy.append(str(valid_bbs_path))
+ 
+         for item in ['memory_map']:
+             for name, entry in config_map[item].items():
+@@ -400,12 +481,12 @@
+                         if os.path.isabs(entry['file']):
+                             filename = entry['file']
+                             files_to_copy.append(filename)
+-                            config_map[item][name]['file'] = os.path.join(f"../{nc.SESS_DIRNAME_NECESSARY_FILES}/", os.path.basename(entry['file']))
++                            config_map[item][name]['file'] = os.path.join("../data/", os.path.basename(entry['file']))
+                         else:
+                             # the original config assumes the base dir, we are now in <base>/fuzzware-project/mainXXX
+-                            config_map[item][name]['file'] = os.path.join(f"../{nc.SESS_DIRNAME_NECESSARY_FILES}/", entry['file'])
++                            config_map[item][name]['file'] = os.path.join("../data/", entry['file'])
+                             filename = os.path.basename(entry['file'])
+-                            files_to_copy.append(os.path.join(orig_config_dir, filename))
++                            files_to_copy.append(os.path.join(self.parent_dir, filename))
+ 
+                         associated_elf = filename[:-4] + ".elf"
+                         if os.path.isfile(associated_elf):
+@@ -449,7 +530,6 @@
+             self.warnings_file.close()
+         self.input_creation_times_file.close()
+         self.job_timings_file.close()
+-        self.dma_snipgen_perf_file.close()
+ 
+     def is_successfully_booted(self, bbl_set):
+         # Has booted basic block config and that basic block is hit
+@@ -459,7 +539,7 @@
+                 (not self.boot_required_bbls - bbl_set)
+         )
+ 
+-    def choose_next_session_inputs(self, config_map, is_first_dma_cfg=False):
++    def choose_next_session_inputs(self, config_map):
+         """
+         Determines different sets of input file paths, ordered by desirability
+ 
+@@ -472,10 +552,7 @@
+         new_mmio_or_boot = []
+         # All unique inputs
+         unique = []
+-
+-        # For the first auto-modeled DMA, also use generic inputs (as at that
+-        # point, MMIO models have stabilized and inputs may be too cluttered)
+-        if self.curr_main_sess_index != 1 and not is_first_dma_cfg:
++        if self.curr_main_sess_index != 1:
+             # Follow-up session, select input files from existing fuzzer session
+             # 1. collect all new config snippets (compare previous session config.yml to new session config_map) and get their context tuples (pc, lr)
+             # 2. make sure not include duplicates
+@@ -498,7 +575,7 @@
+                     else:
+                         continue
+ 
+-                    _, _, _, bbl_set_path, mmio_set_path, _, _ = trace_paths_for_input(input_path)
++                    _, _, _, bbl_set_path, mmio_set_path, _ = trace_paths_for_input(input_path)
+                     if not os.path.isfile(bbl_set_path):
+                         if self.num_main_fuzzer_procs == 1:
+                             self.add_warning_line("[add_main_session] Could not find trace files for input path '{}'".format(input_path))
+@@ -523,7 +600,7 @@
+ 
+         return [l for l in input_candidate_lists if l]
+ 
+-    def add_main_session(self, prefix_input_candidate=None, is_first_dma_cfg=False, verbose=False):
++    def add_main_session(self, prefix_input_candidate=None):
+         config_map = deepcopy(self.default_config_map)
+         # merge into the config map all other optional config files: mmio, exit, main_snippets
+         mmio_model_config_map = load_config_deep(self.mmio_model_config_path)
+@@ -534,11 +611,6 @@
+                 config_map['mmio_models'] = {}
+             add_config_entries(config_map['mmio_models'], [mmio_model_config_map['mmio_models']])
+ 
+-        dma_config_map = load_config_deep(self.dma_config_path)
+-        if dma_config_map:
+-            logger.info("Merging auto-generated DMA config into config")
+-            add_dma_config(config_map, dma_config_map)
+-
+         exitat_config_map = load_config_deep(self.exit_at_config_path)
+         if exitat_config_map:
+             # merge exit_at configs into base file
+@@ -560,12 +632,12 @@
+             prefix_input_candidate = self.curr_main_session.prefix_input_path
+ 
+         self.curr_main_sess_index += 1
+-        self.sessions[self.curr_main_sess_key] = Session(self, self.curr_main_sess_key, self.num_main_fuzzer_procs, config_map, verbose=verbose)
++        self.sessions[self.curr_main_sess_key] = Session(self, self.curr_main_sess_key, self.num_main_fuzzer_procs, config_map)
+         self.known_input_hashes[self.curr_main_sess_key] = set()
+ 
+         # Try different sets of inputs in order of quality
+         start_success = False
+-        for input_path_list in self.choose_next_session_inputs(config_map, is_first_dma_cfg):
++        for input_path_list in self.choose_next_session_inputs(config_map):
+             # We have previous inputs, carry them over
+             logger.debug("Copying over {} inputs".format(len(input_path_list)))
+ 
+@@ -589,13 +661,11 @@
+         num_dead_fuzzer_restarts = 0
+         num_config_updates = 0 # Types of config updates, new/modified: 1. MMIO models, 2. exit-at, 3. state, 4. systick enabled
+         restart_pending = False
+-        dma_modeling_running = False
+         pending_prefix_candidate = None
+         time_latest_new_basic_block = None
+-        time_last_dma_eval_start = None
+-        is_first_dma_cfg = False
+ 
+-        unprocessed_inputs = set()
++        # {input_path: {PREFIX_NAME: trace_path}}
++        available_trace_paths_for_input = {}
+         current_time = time.time()
+         while True:
+             if self.shutdown_requested and not restart_pending:
+@@ -628,7 +698,7 @@
+                     logger.debug(f"New Fuzzing input. {session_name} -> {fuzzer_instance_name}: {input_filename}")
+                     idle_count = 0
+                     self.known_input_hashes[session_name].add(new_hash)
+-                    unprocessed_inputs.add(fuzz_input_path)
++                    available_trace_paths_for_input[fuzz_input_path] = {}
+                     self.worker_pool.enqueue_job_trace_gen(fuzz_input_path)
+ 
+                 if had_to_wait:
+@@ -642,6 +712,7 @@
+                 logger.debug(f"Got MMIO state: {mmio_state_filename}")
+                 if not self.disable_modeling:
+                     self.worker_pool.enqueue_job_analyze_model(mmio_state_filename, mmio_state_path)
++                    num_config_updates += 1
+             except queue.Empty:
+                 pass
+ 
+@@ -653,62 +724,35 @@
+                 logger.info(f"New MMIO model: {config_snippet_filename}")
+ 
+                 merge_config_file_into(self.mmio_model_config_path, config_path)
+-                num_config_updates += 1
+-            except queue.Empty:
+-                pass
+-
+-            try:
+-                event_time, dma_candidate_cfg_path = self.queue_dma_config_candidates.get_nowait()
+-                idle_count = 0
+-                self.wait_event_timeout(event_time)
+-                config_candidate_filename = os.path.basename(dma_candidate_cfg_path)
+-                logger.info(f"New DMA config candidate: {config_candidate_filename}")
+-                is_new_dma_cfg = False
+-
+-                if not os.path.exists(self.dma_config_path):
+-                    is_new_dma_cfg = True
+-                    is_first_dma_cfg = True
+-                else:
+-                    is_new_dma_cfg = is_dma_config_update(self.dma_config_path, dma_candidate_cfg_path)
+-
+-                # We found a new DMA config, we need a next main dir
+-                if is_new_dma_cfg:
+-                    logger.info(f"Adapting new DMA config: {dma_candidate_cfg_path}")
+-                    if os.path.exists(self.dma_config_path):
+-                        logger.info(f"Deleting existing DMA config")
+-                        os.remove(self.dma_config_path)
+-                    shutil.copy2(dma_candidate_cfg_path, self.dma_config_path)
+-                    restart_pending = True
+-                    self.curr_main_session.kill_fuzzers()
+             except queue.Empty:
+                 pass
+ 
+             try:
+                 event_time, trace_file_path = self.queue_traces.get_nowait()
+                 input_file_path = input_for_trace_path(trace_file_path)
++                prefix = trace_prefix_for_path(trace_file_path)
+ 
+                 # Trace files can show up after input has already been removed. Skip those cases
+-                if input_file_path in unprocessed_inputs:
+-                    logger.debug(f"Looking at trace file {os.path.basename(trace_file_path)}")
+-                    required_traces = _, _, _, bbl_set_path, mmio_set_path, _, _ = trace_paths_for_trace(trace_file_path)
+-                    if not self.do_full_tracing:
+-                        required_traces = bbl_set_path, mmio_set_path
++                if input_file_path in available_trace_paths_for_input:
++                    available_trace_paths_for_input[input_file_path][prefix] = trace_file_path
+ 
+                     # Make sure we have all traces ready before accessing them
+-                    if all(os.path.exists(p) for p in required_traces):
++                    if len(available_trace_paths_for_input[input_file_path]) == self.num_required_traces:
+                         # All traces ready. Process now
+-                        unprocessed_inputs.remove(input_file_path)
+-
+                         idle_count = 0
+                         self.wait_event_timeout(event_time)
+                         logger.debug(f"Processing traces for input {input_file_path}")
+ 
+-                        _, _, fuzzer_instance_name, _, input_filename = get_input_path_components(input_file_path)
+-                        fuzzer_instance_num = id_from_path(fuzzer_instance_name)
++                        # Pop traces and process them
++                        traces_per_prefix = available_trace_paths_for_input.pop(input_file_path)
++
++                        trace_filename = os.path.basename(trace_file_path)
++                        input_filename = get_input_filename(trace_file_path)
++                        input_file_path = input_for_trace_path(trace_file_path)
+ 
+                         #### Set-based Processing
+-                        bbl_set = set(parse_bbl_set(bbl_set_path))
+-                        mmio_set_entries = parse_mmio_set(mmio_set_path)
++                        bbl_set = set(parse_bbl_set(traces_per_prefix[PREFIX_BASIC_BLOCK_SET]))
++                        mmio_set_entries = parse_mmio_set(traces_per_prefix[PREFIX_MMIO_SET])
+ 
+                         logger.debug("Looking at new translation block set")
+                         new_bbs = bbl_set - self.visited_translation_blocks
+@@ -727,20 +771,11 @@
+                                     logger.info(f"New translation block: 0x{pc:08x}{sym_suffix}")
+                                 if self.groundtruth_milestone_basic_blocks and pc in self.groundtruth_milestone_basic_blocks:
+                                     logger.info(f"Discovered milestone basic block: 0x{pc:08x}{sym_suffix}")
+-                                    self.milestone_log_append(pc)
+                                     self.visited_milestone_basic_blocks.add(pc)
+-                                    # check if milestone threshold was reached
+-                                    if self.milestone_limit and len(self.visited_milestone_basic_blocks) >= self.milestone_limit:
+-                                        self.shutdown()
+                             self.visited_translation_blocks |= new_bbs
+ 
+-                        if self.enable_dma_detection and fuzzer_instance_num == 1:
+-                            # For each input from the first fuzzer instance, submit a job for DMA detection
+-                            logger.debug(f"Enqueuing new input for DMA detection: {input_file_path}")
+-                            self.worker_pool.enqueue_job_gen_dma_snippet(input_file_path, use_python_version=self.dma_detection_use_python, snip_format=self.dma_snippet_format)
+-
+                         if (not (self.curr_main_session.prefix_input_path or pending_prefix_candidate)) and self.is_successfully_booted(bbl_set):
+-                            logger.info("FOUND MAIN ADDRESS for trace file: '{}'".format(input_filename))
++                            logger.info("FOUND MAIN ADDRESS for trace file: '{}'".format(trace_filename))
+                             pending_prefix_candidate = input_for_trace_path(trace_file_path)
+                             restart_pending = True
+                             self.curr_main_session.kill_fuzzers()
+@@ -778,13 +813,11 @@
+                             # no jobs are present, we can fully restart now
+                             restart_pending, num_config_updates = False, 0
+                             self.curr_main_session.shutdown()
+-                            self.add_main_session(pending_prefix_candidate, is_first_dma_cfg=is_first_dma_cfg, verbose=num_dead_fuzzer_restarts != 0)
++                            self.add_main_session(pending_prefix_candidate)
+                             pending_prefix_candidate = None
+                             time_latest_new_basic_block = None
+-                            is_first_dma_cfg = False
+-                            idle_count = 0
+                         else:
+-                            if idle_count % 50 == 0:
++                            if idle_count % 10 == 0:
+                                 logger.info("Waiting for leftover jobs ({}) to finish...".format(len(self.worker_pool.jobs)))
+                                 self.worker_pool.check_lost_jobs()
+                     else:
+@@ -804,19 +837,6 @@
+                                 self.add_warning_line("[ERROR] Too many fuzzer sessions died, exiting")
+                                 self.request_shutdown()
+ 
+-                if self.enable_dma_detection and idle_count > IDLE_COUNT_DMA_DETECTION and num_config_updates == 0:
+-                    # If things have stabilized, trigger a round of DMA detection for the current snippets
+-                    if not dma_modeling_running:
+-                        logger.info("### Triggering DMA evaluation ###")
+-                        self.curr_main_session.num_dma_cfg_candidates += 1
+-                        self.worker_pool.enqueue_job_evaluate_dma_snippets(nc.dma_cfg_candidate_path_for_num(self.curr_main_session.base_dir, self.curr_main_session.num_dma_cfg_candidates), self.dma_detection_use_python_summary, snip_format=self.dma_snippet_format)
+-                        dma_modeling_running = True
+-                        time_last_dma_eval_start = time.time()
+-                    elif time.time() - time_last_dma_eval_start > DMA_ANALYSIS_RERUN_TIMEOUT:
+-                        # Re-run DMA modeling if sufficient time has passed
+-                        dma_modeling_running = False
+-                        time_last_dma_eval_start = None
+-
+             # Do we have config updates?
+             if (not restart_pending) and num_config_updates != 0 and (
+                 # We have a huge number of config updates
+@@ -846,8 +866,6 @@
+         trace_gen_job_count = len(self.worker_pool.job_queue_trace_gen)
+         model_gen_job_count = len(self.worker_pool.job_queue_modeling)
+         state_gen_job_count = len(self.worker_pool.job_queue_state_gen)
+-        dma_detect_job_count = len(self.worker_pool.job_queue_dma_snippet_gen) + len(self.worker_pool.job_queue_dma_modeling)
+-
+         log_string = f"Current Pipeline Status (main{self.curr_main_sess_index:03d})\n"
+         if self.groundtruth_valid_basic_blocks:
+             num_covered_bbs, num_valid_bbs = len(self.visited_valid_basic_blocks), len(self.groundtruth_valid_basic_blocks)
+@@ -859,7 +877,7 @@
+             num_covered_milestone_bbs, num_milestone_bbs = len(self.visited_milestone_basic_blocks), len(self.groundtruth_milestone_basic_blocks)
+             log_string += f" Milestones covered: {num_covered_milestone_bbs} / {num_milestone_bbs} ({round(num_covered_milestone_bbs / num_milestone_bbs * 100, 2) }%)"
+ 
+-        log_string += f"\nCurrent jobs in Queue (trace gen/state gen/model gen/dma detect): {trace_gen_job_count}/{state_gen_job_count}/{model_gen_job_count}/{dma_detect_job_count}\n"
++        log_string += f"\nCurrent jobs in Queue (trace gen/state gen/model gen): {trace_gen_job_count}/{state_gen_job_count}/{model_gen_job_count}\n"
+ 
+         if len(self.curr_main_session.fuzzers) == 1:
+             curr_execs_per_second, overall_execs_per_second = self.curr_main_session.get_execs_per_sec(1)

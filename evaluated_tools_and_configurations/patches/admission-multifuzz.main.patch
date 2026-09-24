@@ -1,0 +1,124 @@
+--- tools/MultiFuzz/hail-fuzz/src/main.rs	2026-09-19 08:08:10.257824000 +0800
++++ /tmp/admission_extract/multifuzz/main.rs	2026-04-17 16:25:50.753196800 +0800
+@@ -22,6 +22,9 @@
+     time::Duration,
+ };
+ 
++use std::cell::RefCell;
++use crate::config::EnabledFeatures;
++
+ use anyhow::Context;
+ use hashbrown::{HashMap, HashSet};
+ use icicle_cortexm::{config::FirmwareConfig, genconfig, CortexmTarget};
+@@ -41,7 +44,7 @@
+     debugging::trace::{self, PathTracerRef},
+     dictionary::{Dictionary, DictionaryRef, MultiStreamDict},
+     extension::LengthExtData,
+-    input::{CortexmMultiStream, MultiStream, StreamKey},
++    input::{CortexmMultiStream, MultiStream, StreamKey, AdmissionMode},
+     load_resizer::LoadResizeInjector,
+     monitor::{CrashLogger, Monitor},
+     mutations::random_input,
+@@ -71,6 +74,92 @@
+     }
+ }
+ 
++
++fn perform_strict_admission(config: &Config) -> anyhow::Result<()> {
++    use crate::input::{AdmissionMode, ADMISSION_STATE, ADMISSION_COUNT};
++    use icicle_vm::cpu::ExceptionCode;
++    use crate::config::EnabledFeatures;
++    use std::sync::atomic::{AtomicU32, Ordering};
++    use std::sync::Arc;
++
++    const ADMISSION_THRESHOLD: u32 = 512;
++    let admission_seeds = [
++    (AdmissionMode::Zeroes, "02_Zeroes"),
++    (AdmissionMode::Ones, "01_Ones"),
++    (AdmissionMode::Shifting, "00_ShiftingBit"),
++    ];
++
++    println!("Starting Mandatory Admission Test (Full Consumption Mode)...");
++
++    let mut current_config = config.clone();
++    current_config.firmware.fuzz_consumption_timeout = 0;
++
++    let features = EnabledFeatures::from_env()?;
++    let (mut target, mut vm) = setup_vm(&mut current_config, &features)?;
++    target.initialize_vm(&current_config.fuzzer, &mut vm)?;
++
++    let bb_count = Arc::new(AtomicU32::new(0));
++    let bb_count_clone = bb_count.clone();
++    let hook_id = vm.cpu.add_hook(move |cpu: &mut icicle_vm::cpu::Cpu, _addr| {
++    let current = bb_count_clone.fetch_add(1, Ordering::Relaxed);
++    if current >= 3_000_000 {
++        cpu.exception.code = ExceptionCode::Halt as u32;
++    }
++    });
++    icicle_vm::injector::register_block_hook_injector(&mut vm, 0, u64::MAX, hook_id);
++
++    let snapshot = vm.snapshot();
++    let mut all_passed = true;
++
++    for (mode, name) in admission_seeds {
++    println!(">>> Testing Seed: {}", name);
++
++    vm.restore(&snapshot);
++    bb_count.store(0, Ordering::Relaxed);
++    ADMISSION_STATE.with(|s| *s.borrow_mut() = Some(mode));
++    ADMISSION_COUNT.with(|c| *c.borrow_mut() = 0);
++
++    let exit = target.run(&mut vm)?;
++
++    let consumed = ADMISSION_COUNT.with(|c| *c.borrow());
++    ADMISSION_STATE.with(|s| *s.borrow_mut() = None);
++
++    let blocks_executed = bb_count.load(Ordering::Relaxed);
++    let hit_limit = blocks_executed >= 3_000_000;
++    let is_full = consumed >= ADMISSION_THRESHOLD;
++    let is_read_watch = matches!(exit, icicle_vm::VmExit::UnhandledException((ExceptionCode::ReadWatch, _)));
++    let is_halt = matches!(exit, icicle_vm::VmExit::Halt);
++
++    if is_full || is_read_watch {
++        println!("[ADMISSION] Seed {} PASSED: NORMAL_FULL_CONSUMPTION (Consumed {} reads).", name, consumed);
++    } else if hit_limit {
++        if consumed > 0 {
++            println!("[ADMISSION] Seed {} PASSED: NORMAL_LIMIT_REACHED (Consumed {}/{} reads).", name, consumed, ADMISSION_THRESHOLD);
++        } else {
++            println!("[ADMISSION] Seed {} FAILED: HANG (Reached 3M blocks with ZERO consumption).", name);
++            all_passed = false;
++        }
++    } else if is_halt {
++        println!("[ADMISSION] Seed {} FAILED: INCOMPLETE_CONSUMPTION (Stopped at {} blocks, only consumed {}/{}).", 
++            name, blocks_executed, consumed, ADMISSION_THRESHOLD);
++        all_passed = false;
++    } else {
++        let crash_info = target.exit_string(exit);
++        println!("[ADMISSION] Seed {} FAILED: CRASH ({} at {:#x}). Consumed: {}/{}", 
++            name, crash_info, vm.cpu.read_pc(), consumed, ADMISSION_THRESHOLD);
++        all_passed = false;
++    }
++    }
++
++    if !all_passed {
++    println!("Firmware Admission Failed: One or more seeds failed the test.");
++    anyhow::bail!("Firmware Admission Failed. Check individual seed results.");
++    }
++
++    println!("All 3 admission seeds passed! Pre-fuzzing validation successful.");
++    Ok(())
++}
++
+ fn run() -> anyhow::Result<()> {
+     if let Some(path) = std::env::var_os("GENCONFIG") {
+         return genconfig::generate_and_save(path.as_ref(), false);
+@@ -139,6 +228,9 @@
+         format!("Failed to initialize working directory at: {}", config.workdir.display())
+     })?;
+ 
++    perform_strict_admission(&config)?;
++    return Ok(());
++
+     let global_queue = Arc::new(GlobalQueue::init(config.fuzzer.workers as usize));
+     if config.fuzzer.resume {
+         for entry in std::fs::read_dir(&config.workdir.join("imports"))

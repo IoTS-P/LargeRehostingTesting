@@ -1,0 +1,60 @@
+--- tools/MultiFuzz/hail-fuzz/src/input.rs	2026-09-19 08:08:10.253483000 +0800
++++ /tmp/admission_extract/multifuzz/input.rs	2026-04-17 16:25:54.957889900 +0800
+@@ -1,4 +1,5 @@
+ use std::io::Read;
++use std::cell::RefCell;
+ 
+ use anyhow::Context;
+ use hashbrown::HashMap;
+@@ -57,6 +58,18 @@
+ const VERSION: u8 = 1;
+ const FILE_HEADER: [u8; 4] = [b'm', b'u', b'l', VERSION];
+ 
++#[derive(Debug, Clone, Copy, PartialEq)]
++pub enum AdmissionMode {
++    Zeroes,
++    Ones,
++    Shifting,
++}
++
++thread_local! {
++    pub static ADMISSION_STATE: RefCell<Option<AdmissionMode>> = RefCell::new(None);
++    pub static ADMISSION_COUNT: RefCell<u32> = RefCell::new(0);
++}
++
+ /// Represents an input source where every MMIO access is read from a global input stream.
+ #[derive(Default)]
+ pub struct MultiStream {
+@@ -327,6 +340,32 @@
+ 
+ impl IoMemory for MultiStream {
+     fn read(&mut self, addr: u64, buf: &mut [u8]) -> MemResult<()> {
++
++        let mut handled_by_admission = false;
++        let mut admission_val = 0u8;
++
++        ADMISSION_STATE.with(|state: &RefCell<Option<AdmissionMode>>| {
++            if let Some(mode) = *state.borrow() {
++                ADMISSION_COUNT.with(|count_ptr: &RefCell<u32>| {
++                    let mut count = count_ptr.borrow_mut();
++                    if *count < 512 {
++                        admission_val = match mode {
++                            AdmissionMode::Zeroes => 0u8,
++                            AdmissionMode::Ones => 0xffu8,
++                            AdmissionMode::Shifting => 1u8 << (*count % 8),
++                        };
++                        *count += 1;
++                        handled_by_admission = true;
++                    }
++                });
++            }
++        });
++
++        if handled_by_admission {
++            buf.fill(admission_val);
++            return Ok(());
++        }
++
+         let data = self.next_bytes(addr, buf.len()).ok_or(MemError::ReadWatch)?;
+         buf.copy_from_slice(data);
+         Ok(())

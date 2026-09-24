@@ -118,4 +118,43 @@ for entry in "${NESTED_PATCHES[@]}"; do
   fi
 done
 
+# Admission-test changes.  These nine diffs were exported file by file against the
+# reference server's copy of each tool (the files it keeps under /tmp/admission_extract
+# there), so their paths carry the tool directory and their "+" side names an absolute
+# path.  `git apply` would refuse the absolute side, therefore they are applied with GNU
+# `patch -p2` inside the tool directory.  Direction is detected like above: a patch that
+# reverses cleanly is already in place.
+ADMISSION_PATCHES=(
+  "evaluated_tools_and_configurations/patches/admission-fuzzware.__init__.patch:evaluated_tools_and_configurations/tools/fuzzware"
+  "evaluated_tools_and_configurations/patches/admission-fuzzware.pipeline.patch:evaluated_tools_and_configurations/tools/fuzzware"
+  "evaluated_tools_and_configurations/patches/admission-gdma.__init__.patch:evaluated_tools_and_configurations/tools/gdma"
+  "evaluated_tools_and_configurations/patches/admission-gdma.pipeline.patch:evaluated_tools_and_configurations/tools/gdma"
+  "evaluated_tools_and_configurations/patches/admission-hoedur.input.patch:evaluated_tools_and_configurations/tools/hoedur"
+  "evaluated_tools_and_configurations/patches/admission-hoedur.lib.patch:evaluated_tools_and_configurations/tools/hoedur"
+  "evaluated_tools_and_configurations/patches/admission-hoedur.runner.patch:evaluated_tools_and_configurations/tools/hoedur"
+  "evaluated_tools_and_configurations/patches/admission-multifuzz.input.patch:evaluated_tools_and_configurations/tools/MultiFuzz"
+  "evaluated_tools_and_configurations/patches/admission-multifuzz.main.patch:evaluated_tools_and_configurations/tools/MultiFuzz"
+)
+
+for entry in "${ADMISSION_PATCHES[@]}"; do
+  pfile="${entry%%:*}"; dir="${entry##*:}"
+  [ -f "$REPO_ROOT/$pfile" ] || { c_red "missing $pfile"; rc=1; continue; }
+  [ -d "$REPO_ROOT/$dir" ] || { c_red "missing submodule $dir"; rc=1; continue; }
+  if patch -p2 -R --dry-run --forward -i "$REPO_ROOT/$pfile" -d "$REPO_ROOT/$dir" >/dev/null 2>&1; then
+    c_green "already applied : $pfile"
+  else
+    case "$MODE" in
+      check) if patch -p2 --dry-run --forward -i "$REPO_ROOT/$pfile" -d "$REPO_ROOT/$dir" >/dev/null 2>&1; then
+               c_blue "not applied     : $pfile"
+             else c_red "does NOT apply  : $pfile"; rc=1; fi ;;
+      apply) if patch -p2 --forward --no-backup-if-mismatch -i "$REPO_ROOT/$pfile" -d "$REPO_ROOT/$dir" >/dev/null 2>&1; then
+               c_green "applied         : $pfile"
+             else c_red "apply failed    : $pfile"; rc=1; fi ;;
+      revert) if patch -p2 -R --forward --no-backup-if-mismatch -i "$REPO_ROOT/$pfile" -d "$REPO_ROOT/$dir" >/dev/null 2>&1; then
+                c_green "reverted        : $pfile"
+              else c_red "revert failed   : $pfile"; rc=1; fi ;;
+    esac
+  fi
+done
+
 exit $rc

@@ -1,0 +1,130 @@
+--- tools/hoedur/hoedur/src/runner.rs	2026-09-20 14:03:51.951585800 +0800
++++ /tmp/admission_extract/hoedur/runner.rs	2026-04-17 16:24:16.613419600 +0800
+@@ -366,27 +366,109 @@
+     // set exit signal hook
+     qemu_rs::set_signal_handler()?;
+ 
+-    // run until first MMIO read
+-    log::info!("Running until first MMIO read from input ...");
+-    emulator.set_next_input_limits(EmulatorLimits::new());
+-    let result = emulator
+-        .run(InputFile::default(), RunMode::Normal)
+-        .context("run emulator with empty input")?;
+-    log::info!("Result: {}", result);
+-    let mut coverage = result.coverage;
+-
+-    // config sanity check
+-    match result.stop_reason {
+-        StopReason::EndOfInput => {
+-            log::info!("First MMIO read from input found.");
++    // // run until first MMIO read
++    // log::info!("Running until first MMIO read from input ...");
++    // emulator.set_next_input_limits(EmulatorLimits::new());
++    // let result = emulator
++    //     .run(InputFile::default(), RunMode::Normal)
++    //     .context("run emulator with empty input")?;
++    // log::info!("Result: {}", result);
++    // let mut coverage = result.coverage;
++
++    // // config sanity check
++    // match result.stop_reason {
++    //     StopReason::EndOfInput => {
++    //         log::info!("First MMIO read from input found.");
++    //     }
++    //     reason => {
++    //         anyhow::bail!(
++    //             "Could not run until first MMIO read: {:x?}. Please check your target config.",
++    //             reason
++    //         );
++    //     }
++    // }
++
++    let mut coverage: Option<emulator::CoverageLog> = Some(Default::default());
++
++    {
++        use modeling::input::AdmissionMode;
++        use emulator::{StopReason, Limit};
++        
++        println!("Starting Mandatory Admission Test (strictly 3M blocks, Full Consumption)...");
++        let dry_run_snapshot = emulator.snapshot_create().context("Failed to create snapshot")?;
++
++        let cases = [
++            (AdmissionMode::Zeroes, "02_Zeroes"),
++            (AdmissionMode::Ones, "01_Ones"),
++            (AdmissionMode::Shifting, "00_ShiftingBit"),
++        ];
++
++        let mut all_passed = true;
++        const THRESHOLD: usize = 512;
++
++        for (mode, name) in cases {
++            println!(">>> Testing Mode: {}", name);
++            emulator.snapshot_restore(&dry_run_snapshot);
++            emulator.set_next_input_limits(EmulatorLimits::new().basic_blocks(3_000_000));
++
++            let mut test_input = InputFile::default();
++            test_input.admission_mode = Some(mode);
++            test_input.admission_count.set(0);
++
++            let res = emulator.run(test_input, RunMode::Normal)?;
++            let consumed = res.hardware.access_log.len();
++            
++            let has_bugs = res.bugs.as_ref().map_or(false, |b| !b.is_empty());
++            let passed = match res.stop_reason {
++                StopReason::LimitReached(Limit::BasicBlocks) => {
++                    if consumed >= THRESHOLD {
++                        println!("[ADMISSION] {} PASSED: NORMAL_FULL_CONSUMPTION (Reached limit with {} reads)", name, consumed);
++                        true
++                    } else if consumed > 0 {
++                        println!("[ADMISSION] {} PASSED: NORMAL_LIMIT_REACHED (Consumed {}/{} reads)", name, consumed, THRESHOLD);
++                        true
++                    } else {
++                        println!("[ADMISSION] {} FAILED: HANG (3M blocks with ZERO consumption)", name);
++                        false
++                    }
++                },
++                StopReason::EndOfInput | StopReason::ExitHook | StopReason::Shutdown => {
++                    if has_bugs {
++                        println!("[ADMISSION] {} FAILED: CRASH (Bug detected: {:?})", name, res.bugs);
++                        false
++                    } else if consumed >= THRESHOLD {
++                        println!("[ADMISSION] {} PASSED: NORMAL_FULL_CONSUMPTION (Consumed {} reads)", name, consumed);
++                        true
++                    } else {
++                        println!("[ADMISSION] {} FAILED: INCOMPLETE_CONSUMPTION (Only consumed {}/{})", name, consumed, THRESHOLD);
++                        false
++                    }
++                },
++                StopReason::Crash { pc, exception, .. } => {
++                    println!("[ADMISSION] {} FAILED: CRASH ({} at {:#x})", name, exception, pc);
++                    false
++                },
++                _ => {
++                    println!("[ADMISSION] {} FAILED: UNKNOWN ({:?})", name, res.stop_reason);
++                    false
++                }
++            };
++
++            if !passed {
++                all_passed = false;
++            }
+         }
+-        reason => {
+-            anyhow::bail!(
+-                "Could not run until first MMIO read: {:x?}. Please check your target config.",
+-                reason
+-            );
++
++        if !all_passed {
++            println!("Admission Test Failed: One or more modes failed.");
++            anyhow::bail!("Admission Test Failed"); 
+         }
++
++        println!("All Admission Tests PASSED. Proceeding to Session 0.");
++        emulator.snapshot_restore(&dry_run_snapshot);
++        return Ok(()); 
+     }
++    
+ 
+     for prefix_input in config.command.prefix_inputs() {
+         log::info!("Running prefix input {:?}...", prefix_input);

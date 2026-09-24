@@ -1,0 +1,151 @@
+--- tools/fuzzware/pipeline/fuzzware_pipeline/pipeline.py	2026-09-20 21:19:24.103570200 +0800
++++ /tmp/admission_extract/fuzzware/pipeline.py	2026-04-17 16:22:53.320172100 +0800
+@@ -1,9 +1,14 @@
+ import glob
+ import hashlib
++import re
+ import os
+ import queue
+ import shutil
+ import time
++
++import subprocess
++import sys
++
+ from copy import deepcopy
+ from pathlib import Path
+ from queue import Queue
+@@ -11,7 +16,8 @@
+ from fuzzware_harness.globs import (MMIO_HOOK_MMIO_ALL_ADDRS,
+                                     MMIO_HOOK_PC_ALL_ACCESS_SITES)
+ from fuzzware_harness.tracing.serialization import (parse_bbl_set,
+-                                                    parse_mmio_set)
++                                                    parse_mmio_set,
++                                                    parse_mmio_trace)
+ from fuzzware_harness.util import (_merge_dict, load_config_deep,
+                                    parse_address_value, parse_symbols,
+                                    resolve_region_file_paths, closest_symbol)
+@@ -28,7 +34,7 @@
+ from .naming_conventions import *  # pylint: disable=wildcard-import
+ from .observers.new_config_snippet_handler import NewConfigSnippetHandler
+ from .observers.new_mmio_state_handler import NewMmioStateHandler
+-from .run_target import run_target
++from .run_target import run_target, gen_run_arglist
+ from .session import Session
+ from .util.config import (add_config_entries, merge_config_file_into,
+                           save_config)
+@@ -229,6 +235,68 @@
+         if os.path.exists(milestone_bb_list_path):
+             self.groundtruth_milestone_basic_blocks = parse_milestone_bb_file(milestone_bb_list_path, self.symbols)
+ 
++    def perform_admission_test(self, seed_path):
++
++        mmio_trace_path = os.path.join(self.base_dir, "admission_mmio_trace.bin")
++        seed_size = os.path.getsize(seed_path)
++
++        instruction_limit = 3000000
++        extra_args = ["-l", str(instruction_limit), "-v", "--mmio-trace-out", mmio_trace_path, "--fuzz-consumption-timeout", "0"]
++        cmd = gen_run_arglist(self.base_config_path, extra_args) + [seed_path]
++
++        try:
++            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
++            stdout = result.stdout
++            exit_code = result.returncode
++        except subprocess.TimeoutExpired:
++            if os.path.exists(mmio_trace_path):
++                os.remove(mmio_trace_path)
++            return False, "TIMEOUT", "Execution exceeded physical time limit (120s)"
++
++        is_main_limit_reached = f"Ran into instruction limit of {instruction_limit}" in stdout
++
++        total_consumed = 0
++        if os.path.exists(mmio_trace_path):
++            try:
++                trace_entries = parse_mmio_trace(mmio_trace_path)
++                total_consumed = sum(entry[6] for entry in trace_entries)
++            except Exception:
++                pass
++            finally:
++                os.remove(mmio_trace_path)
++
++        if "Execution failed with error code" in stdout or "Emulation crashed" in stdout or (exit_code != 0 and not is_main_limit_reached):
++            crash_info = "Unknown Crash"
++            detail_match = re.search(r"\(?(\d+: .*?\(UC_ERR_[A-Z_]+\))\)?", stdout)
++            if detail_match:
++                extracted_info = detail_match.group(1)
++                crash_info = "Discovery phase failed" if "UC_ERR_OK" in extracted_info else extracted_info
++            elif "Execution failed with error code" in stdout:
++                try:
++                    crash_info = stdout.split("Execution failed with error code:")[1].split("\n")[0].strip()
++                except:
++                    crash_info = "Harness error"
++            elif exit_code < 0:
++                import signal
++                try:
++                    crash_info = f"OS_SIGNAL_{signal.Signals(-exit_code).name}"
++                except:
++                    crash_info = f"OS_SIGNAL_{abs(exit_code)}"
++            
++            return False, "CRASH", crash_info
++        if is_main_limit_reached:
++            if total_consumed > 0:
++                return True, "NORMAL_LIMIT_REACHED", f"Reached {instruction_limit} limit with {total_consumed} bytes consumed"
++            else:
++                return False, "HANG", f"Reached {instruction_limit} limit with ZERO consumption"
++        if exit_code == 0:
++            if total_consumed >= seed_size:
++                return True, "NORMAL_FULL_CONSUMPTION", f"Consumed all {seed_size} bytes"
++            else:
++                return False, "INCOMPLETE_CONSUMPTION", f"Exited normally but only consumed {total_consumed}/{seed_size} bytes"
++
++        return False, "UNKNOWN", "Did not match any criteria"
++
+     def __init__(self, parent_dir, name, base_inputs, num_main_fuzzer_procs, disable_modeling=False, write_worker_logs=False, do_full_tracing=False, config_name=SESS_FILENAME_CONFIG, timeout_seconds=0, use_aflpp=False):
+         self.booted_bbl = DEFAULT_IDLE_BBL
+         self.disable_modeling = disable_modeling
+@@ -256,7 +324,7 @@
+         self.queue_config_snippets = Queue()
+ 
+         self.create_dirs()
+-        self.check_emulator_dry()
++        # self.check_emulator_dry()
+         logger.info("Adding pipeline level observers")
+         self.add_mmio_state_observer()
+         self.add_config_snippets_observer()
+@@ -300,6 +368,36 @@
+         self.parse_pipeline_yml_config(config_map)
+         self.parse_ground_truth_files()
+ 
++        initial_seeds = glob.glob(os.path.join(self.generic_inputs_dir, "*"))
++        logger.info(f"Starting Admission Test for {len(initial_seeds)} initial seeds...")
++        all_seeds_passed = True
++        
++        for seed in initial_seeds:
++            if os.path.getsize(seed) == 0:
++                logger.info(f"Skipping seed {os.path.basename(seed)} for admission (empty file).")
++                continue 
++
++            is_passed, status, detail = self.perform_admission_test(seed)
++            
++            if is_passed:
++                logger.info(f"[ADMISSION] Seed {os.path.basename(seed)}: PASSED ({status})")
++            else:
++                all_seeds_passed = False
++                if status == "CRASH":
++                    logger.error(f"[ADMISSION] FAILED: Seed {os.path.basename(seed)} CRASHED. Type: {detail}")
++                elif status == "HANG":
++                    logger.error(f"[ADMISSION] FAILED: Seed {os.path.basename(seed)} HANGED. {detail}")
++                else:
++                    logger.error(f"[ADMISSION] FAILED: Seed {os.path.basename(seed)} Reason: {status} ({detail})")
++
++        if not all_seeds_passed:
++            logger.error("Firmware admission test failed on one or more seeds. Terminating pipeline to avoid invalid fuzzing.")
++            sys.exit(1)
++            
++        logger.info("All initial seeds passed admission test. Proceeding to Session 0.")
++        sys.exit(0)
++
++
+     def request_shutdown(self):
+         logger.info("Shutdown requested!")
+         self.shutdown_requested = True
