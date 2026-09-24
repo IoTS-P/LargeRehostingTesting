@@ -60,8 +60,18 @@ else
   build_modules
 fi
 
-cp "$BUILD"/subprojects/akiba_modules/build/libs/amod-*.jar /home/akiba/akiba_framework/modules/ \
-  && c_green "modules updated: $(ls /home/akiba/akiba_framework/modules | wc -l) jar(s)"
+install_modules() {
+  # The framework/db-daemon install below replaces /home/akiba/akiba_framework wholesale
+  # (rm -rf + unzip of the distribution), which deletes modules/ — so the directory has to
+  # be (re)created here, and the copy has to happen after that install.
+  mkdir -p /home/akiba/akiba_framework/modules
+  cp "$BUILD"/subprojects/akiba_modules/build/libs/amod-*.jar /home/akiba/akiba_framework/modules/ \
+    && c_green "modules updated: $(ls /home/akiba/akiba_framework/modules | wc -l) jar(s)"
+}
+
+if [ "$MODULES_ONLY" = 1 ]; then
+  install_modules
+fi
 
 if [ "$MODULES_ONLY" = 0 ]; then
   for pair in "akiba_framework:framework" "akiba_db_daemon:db_daemon"; do
@@ -74,6 +84,6 @@ if [ "$MODULES_ONLY" = 0 ]; then
     cp "$BUILD/dockerfile_needed/entrypoint.sh" "/home/akiba/$proj/" 2>/dev/null || true
     c_green "$name reinstalled from $zip"
   done
-  cp "$BUILD"/subprojects/akiba_modules/build/libs/amod-*.jar /home/akiba/akiba_framework/modules/
+  install_modules
   c_blue "restart the container to pick the new daemon up: scripts/down.sh && scripts/up.sh"
 fi
