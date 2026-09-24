@@ -94,7 +94,7 @@
     "venv": "fuzzware",
     "projectRoot": "hoedur_admission_test",
     "hoedurRoot": "/data/tools/hoedur",
-    "cargoPath": "cargo",
+    "cargoPath": "/home/akiba/.cargo/bin/cargo",
     "baseAddressSource": "firmxray_results.base_address"
   },
   "MultiFuzzAdmissionTest": {
@@ -105,7 +105,7 @@
     "cmdPredo": "source ~/.zshrc",
     "projectRoot": "multifuzz_admission_test",
     "multiFuzzRoot": "/data/tools/MultiFuzz",
-    "cargoPath": "cargo",
+    "cargoPath": "/home/akiba/.cargo/bin/cargo",
     "baseAddressSource": "firmxray_results.base_address"
   }
 }
