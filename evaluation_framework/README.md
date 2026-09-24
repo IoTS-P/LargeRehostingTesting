@@ -65,14 +65,14 @@ wraps.
 - run inside the modules: `fuzzware pipeline --runtime-config-name <config.yml> -p pipeline`,
   `hoedur-convert-fuzzware-config` followed by the hoedur admission run, and the MultiFuzz
   equivalent
-- writes: `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results`
-  (`result`, `detail`) · log: `logs/02b_02b_admission.log`
-- writes (server-aligned table names): `fuzzware_admission_checks_v2`, `hoedur_admission_checks_v2`,
-  `multifuzz_admission_checks_v2`
+- writes: `fuzzware_admission_checks_v2`, `hoedur_admission_checks_v2`,
+  `multifuzz_admission_checks_v2` (`result`, `detail`; the reference server's table names)
+  · log: `logs/02b_02b_admission.log`
 - run inside the modules: the gateway generates `config.yml`, then `fuzzware pipeline
   --runtime-config-name <config.yml> -p pipeline`, the hoedur conversion + admission run, and the
-  MultiFuzz equivalent. The config wraps the fuzzware binary in `timeout 400` because the pinned
-  fuzzware never stops by itself (the reference server caps at 387 s); the module also captures the
+  MultiFuzz equivalent. Admission only decides whether the seeds are consumed — the fuzzer keeps
+  going after that, so the config wraps the fuzzware binary in `timeout 400` (the reference
+  server's own admission runs stop at ≤387 s, 17.7 s on average over 2,468 samples); the module also captures the
   fuzzer's own per-seed lines, which is what fills `detail`
 - cost: seconds for firmware that fails admission; up to the 400 s cap for firmware whose seeds
   pass (reference server: 17.7 s average, 387 s maximum over 2,468 samples — see `docs/pipeline.md`)
@@ -184,7 +184,7 @@ scripts/smoke_test.sh                     # container-only check: built-in ELF +
 | `setup.sh` | host | checks out the tool submodules at the pinned commits, optional nested submodules, applies `patches/` | `scripts/setup.sh --with-nested` |
 | `apply_patches.sh` | host | applies/checks/reverts the captured tool overlays; idempotent, never leaves a partial state | `scripts/apply_patches.sh --check` |
 | `setup_tools.sh` | container | provisions the six evaluated tools into `/data/tools` (survives rebuilds); logs per tool | `scripts/setup_tools.sh --check` / `scripts/setup_tools.sh gdma hoedur` |
-| `rebuild_framework.sh` | host | rebuilds framework/db-daemon/module JARs from the mounted sources and reinstalls them. It uses `/opt/gradle-8.8` (shipped by the image, see the Dockerfile) and falls back to `./gradlew`; either way Maven Central has to be reachable, and the wrapper fallback additionally needs the Gradle distribution | `scripts/rebuild_framework.sh --modules-only` |
+| `rebuild_framework.sh` | host | rebuilds framework/db-daemon/module JARs from the mounted sources and reinstalls them. It uses `/opt/gradle-8.8` when that path exists and otherwise `./gradlew`; either way Maven Central has to be reachable, and the wrapper fallback additionally needs the Gradle distribution (which the wrapper downloads on first use) | `scripts/rebuild_framework.sh --modules-only` |
 | `build_akiba_modules.py` | container | builds every module JAR from source in dependency order (used by the image build too) | `python3 build_akiba_modules.py` |
 | `run_pipeline.sh` | host or container | the stage runner: `--list`, `--only`, `--skip`, `--restore`, `--fuzz-time`; exports after every stage; refuses to start when the `/data` bind mounts are stale | `scripts/run_pipeline.sh --only 02b` |
 | `import_samples.sh` | container | imports every firmware under `/data/samples` into the akiba instance (`--list` to preview) | `scripts/import_samples.sh --list` |

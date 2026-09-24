@@ -42,8 +42,9 @@ the `base_address IS NOT NULL` constraint.
   admissible — `fuzzware pipeline --runtime-config-name <config> -p pipeline`,
   `hoedur-convert-fuzzware-config` + the hoedur admission run, and the MultiFuzz
   equivalent
-* writes: `fuzzware_admission_results`, `hoedur_admission_results`,
-  `multifuzz_admission_results` (`result TEXT`, `detail TEXT`)
+* writes: `fuzzware_admission_checks_v2`, `hoedur_admission_checks_v2`,
+  `multifuzz_admission_checks_v2` (`result TEXT`, `detail TEXT`) — the table names the
+  reference server uses
 
 `result` is `PASSED`, `FAILED_*` or `NOT_RUN`/`RUNTIME_ERROR`; `detail` carries the
 per-seed `[ADMISSION]` lines the fuzzer printed. This is the stage that decides how
@@ -57,42 +58,27 @@ WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)
   AND id IN (SELECT id FROM fuzzware_admission_results WHERE result = 'PASSED')
 ```
 
+**Where the verdicts come from.** The pre-check is part of the tools: the nine
+`evaluated_tools_and_configurations/patches/admission-*.patch` files make fuzzware, gdma,
+hoedur and MultiFuzz run the initial seeds before fuzzing and print one
+`[ADMISSION] Seed … PASSED/FAILED …` line each, which the `*AdmissionTest` modules parse into
+`result`/`detail` (`scripts/apply_patches.sh` applies them). fuzzware and gdma are pure
+Python, so the container's venv picks the change up through the `fuzzware_pipeline` symlink;
+hoedur and MultiFuzz are Rust and have to be rebuilt (`cargo build --release`) after applying.
+
 **Relationship to the reference server.** The server runs one admission config per tool
-(`config_{fuzzware,hoedur,multifuzz,aidfuzzer,fuzzware_gdma}_admission.json`), writing
-`*_admission_checks_v2`, and selects firmware with
-`base_address IS NOT NULL AND entry_valid = 'valid'` — both mirrored here, together with its table
-names. Measured over its whole corpus (2,468 rows each): fuzzware 17.7 s average (4.3 s – 387 s),
-hoedur 19.5 s, multifuzz 42.2 s, GDMA 30 s. Two properties of the pinned toolchain have to be
-handled for the artifact to reach those numbers:
+(`configs/config_{fuzzware,hoedur,multifuzz,aidfuzzer,fuzzware_gdma}_admission.json`) writing
+into `<tool>_admission_checks_v2` for the samples whose `entry_valid` is `valid`; this stage
+mirrors that, only combined into one config. Measured there over 2,468 samples per tool:
+fuzzware 17.7 s on average (4.3 s min, 387 s max), hoedur 19.5 s, multifuzz 42.2 s.
 
-* the fuzzware revision pinned here emits no admission marker and never stops by itself, so the
-  module's `[ADMISSION]` match stays empty and the run would continue as a full fuzzing job. The
-  config therefore wraps the binary (`timeout 400 command fuzzware "$@"` in `cmdPredo`) and the
-  module also captures the fuzzer's own per-seed lines (`Seed … PASSED (NORMAL_FULL_CONSUMPTION)`,
-  `… CRASHED. Type: 6 …`), which is what the reference `detail` column contains;
-* `execute_time` for a firmware whose seeds pass is therefore the cap (~400 s), not the seed-check
-  time; a firmware that fails admission still returns in seconds, as on the server.
-
-Cost: the fuzzware admission test runs the *whole* `fuzzware pipeline` and has **no time limit of
-its own** — the budget that bounds stages `03`–`05` (the `maxTimeout` key, and `--fuzz-time`) never
-reaches it. `fuzzware pipeline` is itself iterative (fuzz → regenerate traces → refine the MMIO
-model → fuzz again), so one firmware costs many waves and easily more than an hour, and the
-per-firmware verdict is only produced when the pipeline process exits, because that is when the
-module folds the collected `[ADMISSION]` lines into the result.
-
-Measured on the reference container with four firmwares (the `--only 02b` selection): the four
-`fuzzware pipeline` processes ran in parallel for over an hour, six waves in (`main001` …
-`main006`), with AFL queues of 0.9k–7.7k inputs, 282–1,026 crashes each and `stats/job_timings.txt`
-still being appended — progression, not a hang. For a functional check of this stage, either give
-it the time, or narrow the eligibility constraint (`sqlSource.constraint`, e.g. `WHERE id = 3349`)
-so that it admits a single firmware.
-
-Variants: `AidFuzzerAdmissionTest` (add `aidFuzzerRoot: /data/tools/aidfuzzer` and the
-matching task to the config; it needs the AidFuzzer snapshot) and the GDMA flavour
-(copy the config and set `venv: fuzzware_gdma` in `FuzzwareGateway` and
-`FuzzwareAdmissionTest`, which routes the gateway and the admission run through the
-DMA-branch fuzzware install).
-
+**Runtime.** Admission only decides whether the seeds are consumed; the fuzzer keeps going
+afterwards, so `02b_admission.json` wraps the fuzzware binary in `timeout 400 command fuzzware
+"$@"` inside `cmdPredo` (the server's own runs stop at ≤387 s). Without that bound the stage
+degenerates into a full fuzzing job. Note also that the container's tool mounts can go stale
+after the host drive is re-mounted: if `/data/tools/<tool>` shows `d?????????`,
+`docker restart largerehosting_akiba` restores them (both `run_pipeline.sh` and the stage will
+otherwise fail with an unreadable-tool error).
 ## Stage 03 — Fuzzware (FuzzwareGateway = Stage 2 Emulation; fuzzing/replay/statistics = Stage 3 Security Testing)
 
 `FuzzwareGateway` prepares a project per firmware under
