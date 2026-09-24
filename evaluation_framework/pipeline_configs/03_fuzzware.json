@@ -21,6 +21,7 @@
       "mode": "fork",
       "forkTo": "03_fuzzware",
       "continueLog": "03_fuzzware",
+      "overwriteProject": true,
       "overwriteLog": true,
       "saveProject": true,
       "noCreateProgram": false

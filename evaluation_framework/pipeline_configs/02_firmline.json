@@ -21,6 +21,7 @@
       "mode": "fork",
       "forkTo": "02_firmline",
       "continueLog": "02_firmline",
+      "overwriteProject": true,
       "overwriteLog": true,
       "saveProject": true,
       "noCreateProgram": false

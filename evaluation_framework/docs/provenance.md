@@ -57,6 +57,11 @@ done
   `src/FuzzwareGateway/kotlin/FuzzwareGateway.kt`, plus five extra modules that
   exist only there (`AidFuzzerAdmissionTest`, `FuzzwareAdmissionTest`,
   `HoedurAdmissionTest`, `MultiFuzzAdmissionTest`, `P2IMGateway`).
+* Local fix in `managers/WorkspaceManager.kt`: the `overwriteProject` cleanup ran *after* the
+  "fork target already exists" early return, which made the option unreachable — a re-run of a
+  fork-mode stage (or any run after an interrupted one) always failed to initialise its
+  workspace. The cleanup now runs first, and every `mode: fork` config sets
+  `"overwriteProject": true`, so stages can be re-run as often as needed.
 * Excluded from the copy (rebuilt at image build time): `lib/ghidra.jar` (227 MB,
   built by Ghidra's `support/buildGhidraJar`), every `build/` directory and the
   distribution zips.

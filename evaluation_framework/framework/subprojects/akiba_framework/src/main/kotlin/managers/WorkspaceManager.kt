@@ -355,13 +355,10 @@ object WorkspaceManager: Closeable {
                     } ?: Path.of(projectConf.projectRoot, "${defaultProjectName()}.gpr")
                     val forkRepFile = forkGrpFile.parent.resolve(
                         forkGrpFile.name.removeSuffix("gpr") + "rep")
-                    if (forkGrpFile.exists()) {
-                        globalLogger.error("Unable to fork project: fork target already exists")
-                        return false
-                    }
-                    // Copy project
-                    globalLogger.info("Copying project file...")
-
+                    // An interrupted run leaves its fork behind, so with overwriteProject the
+                    // target is removed first and the fork is recreated.  (Upstream checked for
+                    // the target *before* this cleanup, which made the option unreachable and
+                    // every re-run fail with "fork target already exists".)
                     if (projectConf.overwriteProject) {
                         if (forkGrpFile.exists())
                             forkGrpFile.deleteExisting()
@@ -374,7 +371,12 @@ object WorkspaceManager: Closeable {
                         val lockFile2 = Path.of(lockFile.absolutePathString() + "~")
                         if (lockFile2.exists())
                             lockFile2.deleteExisting()
+                    } else if (forkGrpFile.exists()) {
+                        globalLogger.error("Unable to fork project: fork target already exists")
+                        return false
                     }
+                    // Copy project
+                    globalLogger.info("Copying project file...")
 
                     grpFile.copyTo(forkGrpFile)
                     repFile.copyToRecursively(forkRepFile, followLinks = true, overwrite = true)
