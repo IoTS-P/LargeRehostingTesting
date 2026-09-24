@@ -1,0 +1,22 @@
+--- tools/hoedur/emulator/src/lib.rs	2026-09-19 08:06:55.158657300 +0800
++++ /tmp/admission_extract/hoedur/lib.rs	2026-04-17 16:24:08.389959200 +0800
+@@ -896,7 +896,7 @@
+         qemu_rs::coverage::get_coverage_bitmap()
+     }
+ 
+-    pub fn memory_blocks(&self) -> impl Iterator<Item = MemoryBlock> {
++    pub fn memory_blocks(&self) -> impl Iterator<Item = MemoryBlock<'_>> {
+         qcontrol().memory_blocks()
+     }
+ 
+@@ -952,8 +952,8 @@
+ 
+ #[derive(Debug)]
+ pub struct EmulatorConfig {
+-    target: EmulatorTargetConfig,
+-    debug: EmulatorDebugConfig,
++    pub target: EmulatorTargetConfig,
++    pub debug: EmulatorDebugConfig,
+ }
+ 
+ impl EmulatorConfig {

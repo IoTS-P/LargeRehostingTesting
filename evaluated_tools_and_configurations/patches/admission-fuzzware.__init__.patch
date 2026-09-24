@@ -1,0 +1,12 @@
+--- tools/fuzzware/pipeline/fuzzware_pipeline/__init__.py	2026-09-20 21:19:24.102367800 +0800
++++ /tmp/admission_extract/fuzzware/__init__.py	2026-04-17 16:22:49.890431300 +0800
+@@ -258,8 +258,7 @@
+     logger.info("Performing initial tests")
+     check_cpu_availability(args.num_local_fuzzer_instances)
+ 
+-    # if args.skip_afl_cpufreq:
+-    #     os.environ['AFL_SKIP_CPUFREQ'] = "1"
++
+     os.environ['AFL_SKIP_CPUFREQ'] = "1"
+     # Fuzzware does not crash the emulator process, disable warning
+     os.environ['AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES'] = "1"
