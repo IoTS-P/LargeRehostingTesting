@@ -242,9 +242,6 @@ RUN chmod 644 /opt/ghidra-jar/ghidra.jar
 COPY --from=radare2 /usr/local/ /usr/local/
 
 # --- akiba framework / db daemon / modules built in stage 2
-# Gradle itself, so rebuild_framework.sh can work inside the running container without
-# downloading the distribution again (the build stage installed it from the release ZIP).
-COPY --from=akiba-build /opt/gradle-8.8 /opt/gradle-8.8
 COPY --from=akiba-build /out/akiba_framework /home/akiba/akiba_framework
 COPY --from=akiba-build /out/akiba_db_daemon /home/akiba/akiba_db_daemon
 
