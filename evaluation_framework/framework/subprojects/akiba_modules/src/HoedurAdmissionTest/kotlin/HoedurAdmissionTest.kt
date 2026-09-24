@@ -164,6 +164,26 @@ class HoedurAdmissionTest(
         val binTarget = outputDir.resolve(originalBinPath.fileName)
         originalBinPath.copyTo(binTarget, true)
 
+        // The generated hoedur config refers to the firmware by the name it carries in the
+        // fuzzware project (its original file name, e.g. 3349.bin), while the copy above uses
+        // the name akiba imported it under (the database id, e.g. 5.bin).  Put the firmware
+        // next to it under every name the config's memory map references, so the lookup cannot
+        // miss.  (Fixtures whose imports kept the original names never hit this.)
+        runCatching {
+            val referenced = Regex("path:\\s*(\\S+)")
+                .findAll(configPath.toFile().readText())
+                .map { it.groupValues[1].trim().substringAfterLast('/') }
+                .filter { it.isNotEmpty() && it != binTarget.fileName.toString() }
+                .toSet()
+            referenced.forEach { ref ->
+                val dst = outputDir.resolve(ref)
+                if (!dst.toFile().exists()) {
+                    originalBinPath.copyTo(dst, true)
+                    logger.info("Also copied the firmware as ${dst.fileName} (referenced by the config)")
+                }
+            }
+        }.onFailure { logger.warn("Could not mirror the config-referenced firmware names: ${it.message}") }
+
         val runCmd = "export LD_LIBRARY_PATH=${hoedurDebugDir.absolutePathString()}:\$LD_LIBRARY_PATH && " +
                 "${hoedurBin.absolutePathString()} " +
                 "--config ${configPath.absolutePathString()} " +
