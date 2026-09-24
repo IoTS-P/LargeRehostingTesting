@@ -13,7 +13,7 @@
       "importRoot": "/",
       "processor": "n/a",
       "autoAnalysisTimeout": 180,
-      "threads": 64
+      "threads": 48
     },
     "withGhidraProject": {
       "projectRoot": "/data/akiba/ghidra_projects",
