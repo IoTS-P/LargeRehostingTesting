@@ -117,7 +117,7 @@ fi
 # kept running, the container holds the old, dead mount: the directories still appear
 # under /data but cannot be read ("Input/output error", d?????????).  Every stage would
 # then fail with "missing config".  Detect it here and say what to do.
-for d in /data/pipelines /data/samples /data/results; do
+for d in /data/tools /data/pipelines /data/samples /data/results; do
   if [ ! -r "$d" ] || ! ls "$d" >/dev/null 2>&1; then
     c_red "bind mount $d is not readable — the host drive was (re)mounted after the container started"
     c_red "fix: docker restart largerehosting_akiba      # pipeline state lives in the named volumes"

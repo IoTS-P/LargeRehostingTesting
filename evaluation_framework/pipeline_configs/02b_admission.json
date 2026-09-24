@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "description": "Stage 2 Emulation \u2014 Admission, matching the reference server: FuzzwareGateway generates the fuzzware configuration, then the three admission tests record per-firmware seed verdicts in fuzzware_admission_checks_v2 / hoedur_admission_checks_v2 / multifuzz_admission_checks_v2 (result, detail). The eligibility constraint is the server's (base_address IS NOT NULL AND entry_valid = 'valid'). The fuzzware run is wrapped in `timeout 400` because the pinned fuzzware has no admission stop of its own; the reference server reaches the same bound (17.7 s average, 387 s maximum over 2,468 samples).",
+    "description": "Stage 2 Emulation \u2014 Admission, matching the reference server: FuzzwareGateway generates the fuzzware configuration, then the three admission tests record per-firmware seed verdicts in fuzzware_admission_checks_v2 / hoedur_admission_checks_v2 / multifuzz_admission_checks_v2 (result, detail). The eligibility constraint is the server's (base_address IS NOT NULL AND entry_valid = 'valid'). The fuzzware run is wrapped in `timeout 400` because the pipeline keeps fuzzing after the admission phase and never stops by itself; the reference server reaches the same bound (17.7 s average, 387 s maximum over 2,468 samples).",
     "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/02b_admission.json@/main > /data/results/logs/02b_admission.log 2>&1 &",
     "constraint": "WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL AND entry_valid = 'valid')"
   },
