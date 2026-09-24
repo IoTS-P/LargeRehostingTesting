@@ -21,6 +21,7 @@
       "mode": "fork",
       "forkTo": "04_hoedur",
       "continueLog": "04_hoedur",
+      "overwriteProject": true,
       "overwriteLog": true,
       "saveProject": true,
       "noCreateProgram": false

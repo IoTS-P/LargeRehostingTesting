@@ -21,6 +21,7 @@
       "mode": "fork",
       "forkTo": "06b_firmrca_classify",
       "continueLog": "06b_firmrca_classify",
+      "overwriteProject": true,
       "overwriteLog": true,
       "saveProject": true,
       "noCreateProgram": false

@@ -21,6 +21,7 @@
       "mode": "fork",
       "forkTo": "02b_admission",
       "continueLog": "02b_admission",
+      "overwriteProject": true,
       "overwriteLog": true,
       "saveProject": true,
       "noCreateProgram": false
