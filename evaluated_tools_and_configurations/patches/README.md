@@ -47,6 +47,7 @@ write them to `<tool>_admission_checks_v2` for samples whose `entry_valid` is `v
 | `admission-fuzzware.__init__.patch`, `admission-fuzzware.pipeline.patch` | `tools/fuzzware` @ `e43dfbd38185ef4a374e1e9a6c9d930a9cc40653` | `diff` against the server's `/tmp/admission_extract` copy |
 | `admission-gdma.__init__.patch`, `admission-gdma.pipeline.patch` | `tools/gdma` @ `f5979d009f18ce0069c7e57c9f557766b5f977c8` (fuzzware branch `DMA`) | same |
 | `admission-hoedur.input.patch`, `admission-hoedur.lib.patch`, `admission-hoedur.runner.patch` | `tools/hoedur` @ `a021fd064e5d831a427a25b17975779eef05c45b` | same |
+| `admission-hoedur.modeling.patch` | `tools/hoedur` @ `a021fd064e5d831a427a25b17975779eef05c45b`, file `modeling/src/input.rs` | same |
 | `admission-multifuzz.input.patch`, `admission-multifuzz.main.patch` | `tools/MultiFuzz` @ `44d0cc5df781ccba0cfb805814abe60655eb3334` | same |
 
 They are applied by `scripts/apply_patches.sh` with `patch -p2` inside the tool directory
@@ -55,6 +56,15 @@ gdma are pure Python, so the change is live as soon as it is applied — the con
 resolve `fuzzware_pipeline` through a symlink into the checkout. hoedur and MultiFuzz are
 Rust: after applying, rebuild them (`cargo build --release` in `tools/hoedur` and
 `tools/MultiFuzz`) or the binaries keep the pre-admission behaviour.
+
+`admission-hoedur.modeling.patch` needs a word of explanation: the admission code lives in
+`modeling/src/input.rs` (the `AdmissionMode` enum, the two `admission_*` fields on `InputFile`
+and the branch in `InputFile::read`), but the hoedur tree carries a second, previously
+byte-identical copy of that file in `hoedur-analyze/src/input.rs`. The exports were taken per
+file name, so the change first landed on the `hoedur-analyze` copy only and the `hoedur` crate
+failed to build (`runner.rs` imports `modeling::input::AdmissionMode`, E0432/E0609). This
+patch carries the same change to the `modeling` copy; both copies now match the reference and
+`cargo build --release` succeeds.
 
 ## What each patch changes and why
 

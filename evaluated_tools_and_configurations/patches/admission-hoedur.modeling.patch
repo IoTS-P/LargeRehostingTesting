@@ -1,0 +1,76 @@
+--- tools/hoedur/modeling/src/input.rs	2026-09-19 08:06:55.245689000 +0800
++++ /tmp/admission_extract/hoedur/modeling_input.rs	2026-04-17 16:24:19.712201100 +0800
+@@ -32,6 +32,13 @@
+     mmio::AccessContext,
+ };
+ 
++#[derive(Debug, Clone, Copy)]
++pub enum AdmissionMode {
++    Zeroes,
++    Ones,
++    Shifting,
++}
++
+ pub mod stream;
+ pub mod value;
+ use stream::{InputStream, Stream};
+@@ -264,6 +271,10 @@
+     random_count: Option<usize>,
+     #[serde(skip)]
+     read_limit: Option<usize>,
++    #[serde(skip)]
++    pub admission_mode: Option<AdmissionMode>,
++    #[serde(skip)]
++    pub admission_count: std::cell::Cell<usize>,
+ }
+ 
+ impl Hash for InputFile {
+@@ -305,6 +316,21 @@
+     }
+ 
+     fn read(&mut self, context: &InputContext) -> Option<Cow<InputValue>> {
++
++        if let Some(mode) = self.admission_mode {
++            let current = self.admission_count.get();
++            if current >= 512 { return None; }
++
++            let val = match mode {
++                AdmissionMode::Zeroes => 0u8,
++                AdmissionMode::Ones => 0xffu8,
++                AdmissionMode::Shifting => 1u8 << (current % 8),
++            };
++
++            self.admission_count.set(current + 1);
++            return Some(Cow::Owned(InputValue::from_repeated_byte(context.value_type(), val)));
++        }
++
+         // verify read limit, if any
+         if let Some(read_limit) = &mut self.read_limit {
+             if *read_limit > 0 {
+@@ -390,6 +416,8 @@
+             random_seed: None,
+             random_count: None,
+             read_limit: None,
++            admission_mode: None,
++            admission_count: std::cell::Cell::new(0),
+         }
+     }
+ 
+@@ -405,6 +433,8 @@
+             random_seed: None,
+             random_count: None,
+             read_limit: None,
++            admission_mode: None,
++            admission_count: std::cell::Cell::new(0),
+         }
+     }
+ 
+@@ -510,6 +540,8 @@
+             random_seed: self.random_seed,
+             random_count: self.random_count,
+             read_limit: self.read_limit,
++            admission_mode: None,
++            admission_count: std::cell::Cell::new(0),
+         }
+     }
+ 
