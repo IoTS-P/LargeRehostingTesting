@@ -65,8 +65,11 @@ install_modules() {
   # (rm -rf + unzip of the distribution), which deletes modules/ — so the directory has to
   # be (re)created here, and the copy has to happen after that install.
   mkdir -p /home/akiba/akiba_framework/modules
-  cp "$BUILD"/subprojects/akiba_modules/build/libs/amod-*.jar /home/akiba/akiba_framework/modules/ \
-    && c_green "modules updated: $(ls /home/akiba/akiba_framework/modules | wc -l) jar(s)"
+  cp "$BUILD"/subprojects/akiba_modules/build/libs/amod-*.jar /home/akiba/akiba_framework/modules/
+  # AkibaUtils is built in its own subproject (akiba_mod_utils) and the framework expects it
+  # next to the analysis modules, so it has to be copied explicitly.
+  cp "$BUILD"/subprojects/akiba_mod_utils/build/libs/amod-*.jar /home/akiba/akiba_framework/modules/ 2>/dev/null || true
+  c_green "modules updated: $(ls /home/akiba/akiba_framework/modules | wc -l) jar(s)"
 }
 
 if [ "$MODULES_ONLY" = 1 ]; then
