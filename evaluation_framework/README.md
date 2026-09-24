@@ -70,9 +70,9 @@ wraps.
   · log: `logs/02b_02b_admission.log`
 - run inside the modules: the gateway generates `config.yml`, then `fuzzware pipeline
   --runtime-config-name <config.yml> -p pipeline`, the hoedur conversion + admission run, and the
-  MultiFuzz equivalent. Admission only decides whether the seeds are consumed — the fuzzer keeps
-  going after that, so the config wraps the fuzzware binary in `timeout 400` (the reference
-  server's own admission runs stop at ≤387 s, 17.7 s on average over 2,468 samples); the module also captures the
+  MultiFuzz equivalent. The patched pipeline runs the admission test right after parsing its
+  configuration and then exits (1 on a failing seed, 0 when all pass), so the stage never fuzzes
+  and needs no timeout — 17.7 s on average over the reference server's 2,468 rows; the module also captures the
   fuzzer's own per-seed lines, which is what fills `detail`
 - cost: seconds for firmware that fails admission; up to the 400 s cap for firmware whose seeds
   pass (reference server: 17.7 s average, 387 s maximum over 2,468 samples — see `docs/pipeline.md`)

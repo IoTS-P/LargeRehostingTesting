@@ -72,10 +72,12 @@ into `<tool>_admission_checks_v2` for the samples whose `entry_valid` is `valid`
 mirrors that, only combined into one config. Measured there over 2,468 samples per tool:
 fuzzware 17.7 s on average (4.3 s min, 387 s max), hoedur 19.5 s, multifuzz 42.2 s.
 
-**Runtime.** Admission only decides whether the seeds are consumed; the fuzzer keeps going
-afterwards, so `02b_admission.json` wraps the fuzzware binary in `timeout 400 command fuzzware
-"$@"` inside `cmdPredo` (the server's own runs stop at ≤387 s). Without that bound the stage
-degenerates into a full fuzzing job. Note also that the container's tool mounts can go stale
+**Runtime.** The patched pipeline performs the admission test directly after parsing its
+configuration and then *exits*: `sys.exit(1)` when a seed fails, `sys.exit(0)` when they all pass
+(`"All initial seeds passed admission test. Proceeding to Session 0."`). This stage is therefore a
+check, never a fuzzing run — no timeout is needed and the reference configs carry none. Measured:
+6.8 s for the fixture in this repository, 17.7 s on average over the reference server's 2,468
+rows (the 387 s maximum is a seed that hangs until its own physical time limit). Note also that the container's tool mounts can go stale
 after the host drive is re-mounted: if `/data/tools/<tool>` shows `d?????????`,
 `docker restart largerehosting_akiba` restores them (both `run_pipeline.sh` and the stage will
 otherwise fail with an unreadable-tool error).
