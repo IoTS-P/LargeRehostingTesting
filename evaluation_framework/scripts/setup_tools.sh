@@ -207,6 +207,9 @@ provision_hoedur() {
       https://download.qemu.org/qemu-7.1.0.tar.xz || return 1
   fi
   run_logged hoedur bash -c "cd '$root' && /home/akiba/.cargo/bin/cargo build --release" || return 1
+# The hoedur admission module (HoedurAdmissionTest) drives <hoedur>/target/debug/hoedur-arm, so the
+# default (debug) profile has to be built as well - a release-only build makes it exit 127.
+run_logged hoedur bash -c "cd '$root' && /home/akiba/.cargo/bin/cargo build" || return 1
   run_logged hoedur sudo cp "$root/target/release/libqemu-system-arm.release.so" /usr/lib/ || true
   link_hoedur_bins
   c_green "hoedur: built ($(ls "$root/target/release" 2>/dev/null | grep -c '^hoedur') hoedur binaries)"

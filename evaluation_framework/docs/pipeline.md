@@ -171,3 +171,29 @@ scripts/run_pipeline.sh --restore 03_fuzzware
 Every stage can run on its own — the constraint in `sqlSource` decides which
 firmwares it touches, so a stage can be repeated on a subset by editing a copy of
 the config in `pipelines/`.
+
+### 02b admission - verified locally
+
+The three admission tasks ran against the smoke fixture (`id=5`, `3349.bin`) and produced one row
+per tool in seconds, never a fuzzing run:
+
+| tool | table | time | result |
+|---|---|---|---|
+| Fuzzware | `fuzzware_admission_checks_v2` | 6.7 s | `PASSED` (3 seeds, `NORMAL_FULL_CONSUMPTION`) |
+| Hoedur | `hoedur_admission_checks_v2` | 2.6 s | `PASSED` (3 seeds, `NORMAL_FULL_CONSUMPTION`) |
+| MultiFuzz | `multifuzz_admission_checks_v2` | 2.6 s | `PASSED` (3 seeds, `NORMAL_FULL_CONSUMPTION`) |
+
+This matches the reference server, whose `*_admission_checks_v2` rows average 17.7 s (Fuzzware),
+19.5 s (Hoedur) and 42.2 s (MultiFuzz) over 2,468 rows.  The stage stays short by construction: the
+patched `fuzzware pipeline` performs the admission test while parsing its configuration and then
+exits (`sys.exit(0)` when every seed is consumed normally, `sys.exit(1)` otherwise), so no timeout
+wrapper is needed or wanted.
+
+Two environment facts the tasks depend on:
+
+- Hoedur's admission module invokes `<hoedur>/target/debug/hoedur-arm`, i.e. the **debug** build;
+  `setup_tools.sh` therefore builds both profiles.
+- The generated hoedur configuration addresses the firmware by the name it has in the fuzzware
+  project - its **original file name** (`3349.bin`), as recorded in the database.  `HoedurAdmissionTest`
+  places the firmware in its project directory under that name as well as under the name akiba
+  imported it with (`5.bin`), so the memory-map lookup cannot miss.
