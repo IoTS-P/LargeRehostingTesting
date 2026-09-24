@@ -68,14 +68,14 @@ wraps.
 - writes: `fuzzware_admission_checks_v2`, `hoedur_admission_checks_v2`,
   `multifuzz_admission_checks_v2` (`result`, `detail`; the reference server's table names)
   · log: `logs/02b_02b_admission.log`
-- run inside the modules: the gateway generates `config.yml`, then `fuzzware pipeline
-  --runtime-config-name <config.yml> -p pipeline`, the hoedur conversion + admission run, and the
-  MultiFuzz equivalent. The patched pipeline runs the admission test right after parsing its
-  configuration and then exits (1 on a failing seed, 0 when all pass), so the stage never fuzzes
-  and needs no timeout — 17.7 s on average over the reference server's 2,468 rows; the module also captures the
-  fuzzer's own per-seed lines, which is what fills `detail`
-- cost: seconds for firmware that fails admission; up to the 400 s cap for firmware whose seeds
-  pass (reference server: 17.7 s average, 387 s maximum over 2,468 samples — see `docs/pipeline.md`)
+- cost: seconds, never a fuzzing run — the patched pipeline runs the admission test while parsing
+  its configuration and then exits (1 on a failing seed, 0 when every seed is consumed normally).
+  Measured on the smoke fixture: 6.7 s (Fuzzware), 2.6 s (Hoedur), 2.6 s (MultiFuzz), all three
+  `PASSED` with per-seed `detail`; the reference server averages 17.7 s / 19.5 s / 42.2 s over its
+  2,468 rows (maximum 387 s). The module also captures the fuzzer's own per-seed lines, which is
+  what fills `detail`. Hoedur's task drives the **debug** build (`target/debug/hoedur-arm`) and
+  looks the firmware up under its **original file name**, so `setup_tools.sh` builds both cargo
+  profiles and `HoedurAdmissionTest` mirrors the name the configuration references
 
 ### `03_fuzzware` — Fuzzware fuzzing (Stage 3 Security Testing)
 
