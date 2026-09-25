@@ -114,6 +114,12 @@ Captured as three files because two of the changed files live in submodules:
   executing a single instruction — the admission test then reports `Unknown Crash` for every
   seed within a second, and the fuzzing stages see no fixture. `scripts/setup_tools.sh`
   installs it into both venvs (`ensure_fuzzware_python_deps <venv>`).
+* `fuzzware_pipeline/__init__.py` — `do_cov` accepts the DMA-branch symbol table. Its
+  `parse_symbols` maps a symbol name to a *list* of addresses (one symbol can start several
+  basic blocks), the vanilla one maps to a single address. Without the fix, `fuzzware cov -p
+  <project>` — the command the modules use to fill the `coverage` column — dies with
+  `TypeError: unsupported operand type(s) for &: 'list' and 'int'` and every fuzzing result
+  reports `coverage = 0` even though the fuzzers filled their queues.
 * `mkvirtualenv -p /usr/bin/python3.10` (was `/usr/bin/python3`) and
   `MODELING_VENV_PYTHON3=/usr/bin/python3.10` — newer python breaks the pinned angr used by the
   modeling component.

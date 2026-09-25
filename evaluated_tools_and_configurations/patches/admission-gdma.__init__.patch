@@ -1,5 +1,5 @@
---- tools/gdma/pipeline/fuzzware_pipeline/__init__.py	2026-09-20 12:27:58.397260600 +0800
-+++ /tmp/admission_extract/fuzzware-gdma/__init__.py	2026-04-17 16:20:47.367272600 +0800
+--- tools/gdma/pipeline/fuzzware_pipeline/__init__.py
++++ /tmp/admission_extract/fuzzware-gdma/__init__.py
 @@ -6,9 +6,7 @@
  import subprocess
  import sys
@@ -260,7 +260,7 @@
  
          # User-provided symbols / basic blocks to skip
          if args.exclude:
-@@ -672,20 +617,14 @@
+@@ -672,20 +617,18 @@
  
          if trace_paths:
              working_directory = os.getcwd()
@@ -281,11 +281,15 @@
      else:
          # By default, if no specific basic blocks are given, show information about symbols
 -        symbol_bbs = set(bb & ~1 for bb in addr_to_sym)
-+        symbol_bbs = set(bb & ~1 for bb in symbols.values())
++        # The DMA-branch emulator maps a symbol name to a *list* of addresses (one symbol can
++        # start several basic blocks); the vanilla one maps it to a single address.  Accept both,
++        # otherwise `fuzzware cov` dies with "TypeError: unsupported operand type(s) for &: 'list'
++        # and 'int'" and the coverage column of every fuzzing result stays 0.
++        symbol_bbs = set(bb & ~1 for v in symbols.values() for bb in (v if isinstance(v, list) else [v]))
  
          covered_bbs = collect_covered_basic_blocks(projdir, only_last_maindir=not args.all_main_dirs, crashes=args.crashes)
          if valid_bbs:
-@@ -696,7 +635,7 @@
+@@ -696,7 +639,7 @@
              logger.debug(f"Writing covered basic blocks to {args.outfile}")
              if args.out_format == COV_FORMAT_PLAIN:
                  dump_cov_plain(covered_bbs, args.outfile)
@@ -294,7 +298,7 @@
                  dump_cov_cartographer(covered_bbs, args.outfile)
              else:
                  logger.error(f"Unknown coverage outfile format '{args.out_format}'")
-@@ -707,7 +646,7 @@
+@@ -707,7 +650,7 @@
                  print("\n====== Found Symbols ======")
                  for bb in sorted(symbol_bbs & covered_bbs):
                      print(f"{bb:#010x} ({addr_to_sym.get(bb)})")
@@ -303,7 +307,7 @@
                  print("\n====== Not Found Symbols ======")
                  for bb in sorted(symbol_bbs - covered_bbs):
                      print(f"{bb:#010x} ({addr_to_sym.get(bb)})")
-@@ -739,9 +678,7 @@
+@@ -739,9 +682,7 @@
      ("bb", nc.PREFIX_BASIC_BLOCK_TRACE), ("bbl", nc.PREFIX_BASIC_BLOCK_TRACE),
      ("mmioset", nc.PREFIX_MMIO_SET),
      ("bbset", nc.PREFIX_BASIC_BLOCK_SET), ("bblset", nc.PREFIX_BASIC_BLOCK_SET),
@@ -314,7 +318,7 @@
  )
  
  MODE_GENTRACES = 'gentraces'
-@@ -751,13 +688,12 @@
+@@ -751,13 +692,12 @@
      check_leftover_args(leftover_args)
  
      projdir = resolve_projdir(args.projdir)
@@ -329,7 +333,7 @@
      if args.main_dirs == "all":
          args.main_dirs = ",".join(list(map(str, range(1, len(list(main_dirs_for_proj(projdir)))+1))))
      elif args.main_dirs == "latest":
-@@ -782,41 +718,26 @@
+@@ -782,41 +722,26 @@
      print(f"Got trace types: {trace_types}")
      print(f"Got trace prefixes: {required_trace_prefixes}")
  
@@ -378,7 +382,7 @@
  
  MODE_GENSTATS = 'genstats'
  STATNAME_COV, STATNAME_MMIO_COSTS, STATNAME_MMIO_OVERHEAD_ELIM = 'coverage', 'modeling-costs', 'mmio-overhead-elim'
-@@ -827,7 +748,6 @@
+@@ -827,7 +752,6 @@
  ]
  def do_genstats(args, leftover_args):
      from .util.config import load_config_deep
@@ -386,7 +390,7 @@
      from .workers.tracegen import gen_all_missing_traces
      from .util import eval_utils
      from .output_conventions import \
-@@ -836,10 +756,8 @@
+@@ -836,10 +760,8 @@
      check_leftover_args(leftover_args)
  
      projdir = resolve_projdir(args.projdir)
@@ -397,7 +401,7 @@
  
      if args.all:
          args.stats = KNOWN_STATNAMES
-@@ -892,7 +810,7 @@
+@@ -892,7 +814,7 @@
              exit(1)
  
          if os.path.exists(args.milestone_bb_file):
@@ -406,7 +410,7 @@
              not_yet_found_milestone_bbs = set(milestone_bbs)
  
          logger.info("Generating missing basic block set traces, if any")
-@@ -1051,9 +969,6 @@
+@@ -1051,9 +973,6 @@
      parser_modeling = subparsers.add_parser(MODE_MODEL, help="Run the modeling component in separation. Mostly a testing feature for development purposes.", add_help=False)
      parser_modeling.set_defaults(func=do_model)
  
@@ -416,7 +420,7 @@
      parser_replaytest = subparsers.add_parser(MODE_REPLAYTEST, help="Checks consistency of fuzzware replay for a given fuzzware project. Mostly a testing feature for develoment purposes.")
      parser_replaytest.set_defaults(func=do_replaytest)
  
-@@ -1064,10 +979,9 @@
+@@ -1064,10 +983,9 @@
      parser_check.set_defaults(func=do_checkenv)
  
      # Pipeline command-line arguments
@@ -430,7 +434,7 @@
      parser_pipeline.add_argument('-n', '--num-local-fuzzer-instances', default=1, type=int, help="Number of local fuzzer instances to use.")
      parser_pipeline.add_argument('--base-inputs', default=None, help="Directory containing the initial inputs to be used for fuzzing. If unspecified, uses simple default inputs.")
      parser_pipeline.add_argument('--run-for', default="00:00:00:00", help="Amount of time to run the pipeline for. Format: DD:HH:MM:SS")
-@@ -1076,15 +990,7 @@
+@@ -1076,15 +994,7 @@
      parser_pipeline.add_argument('--full-traces', default=False, action='store_true', help="Enable generating full traces instead of only generating the (much smaller) set-based traces.")
      parser_pipeline.add_argument('--skip-afl-cpufreq', default=False, action='store_true', help="Skip AFL's performance governor check by setting AFL_SKIP_CPUFREQ=1.")
      parser_pipeline.add_argument('--aflpp', default=False, action="store_true", help="Use AFLplusplus (instead of afl).")
@@ -447,7 +451,7 @@
  
      # Bare-bone Fuzzer command-line arguments
      parser_fuzz.add_argument('out_subdir', help="The output subdirectory name to use.")
-@@ -1102,18 +1008,6 @@
+@@ -1102,18 +1012,6 @@
      # Modeling command-line arguments
      # No extra emu args as we are passing on parsing to the modeling code
  
@@ -466,7 +470,7 @@
      # Replay command-line arguments
      parser_replay.add_argument('input', help="Either a file path (trace/input) or an input id. For additional arguments to be passed to the emulator, refer to 'fuzzware emu -h'")
      parser_replay.add_argument('-p', '--projdir', help="Fuzzware project directory to search for inputs in. Defaults to searching the current working directory for a fuzzware project root.", default=None)
-@@ -1133,8 +1027,6 @@
+@@ -1133,8 +1031,6 @@
      parser_gentraces.add_argument('--dryrun', action="store_true", default=False, help="Only list the missing trace files, do not generate actual traces.")
      parser_gentraces.add_argument('-v', '--verbose', action="store_true", default=False, help="Display stdout output of trace generation.")
      parser_gentraces.add_argument('-n', '--num-instances', default=1, type=int, help="Number of local emulator instances to use.")
@@ -475,7 +479,7 @@
  
      # Genstats command-line arguments
      parser_genstats.add_argument('stats', nargs="*", default=(STATNAME_COV, STATNAME_CRASH_TIMINGS,STATNAME_MMIO_COSTS), help=f"The stats to generate. Options: {','.join(KNOWN_STATNAMES)}. Defaults to '{STATNAME_COV} {STATNAME_CRASH_TIMINGS} {STATNAME_MMIO_COSTS}'.")
-@@ -1157,14 +1049,13 @@
+@@ -1157,14 +1053,13 @@
      parser_cov.add_argument('-p', '--projdir', default=None, help="(Optional) Project directory to search coverage for. If not specified, the current working directory is used.")
      parser_cov.add_argument('-c', '--syms-config', default=None, help="(Optional) Fuzzware config file containing symbols (a 'symbols' attribute). Will be derived from projdir if not specified.")
      parser_cov.add_argument('-o', '--outfile', default=None, help="(Optional) Destination file path to dump a set of matching addresses in line-based hex to.")
