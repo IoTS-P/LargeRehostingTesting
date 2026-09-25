@@ -34,7 +34,7 @@ services:
       dockerfile: evaluation_framework/docker/Dockerfile
       args:
         VERSION: ${VERSION:-3.1.2}
-        GHIDRA_VERSION: ${GHIDRA_VERSION:-12.0.4}
+        GHIDRA_VERSION: ${GHIDRA_VERSION:-11.3.2}
         GHIDRA_FIRMLINE_VERSION: ${GHIDRA_FIRMLINE_VERSION:-11.3.2}
         R2_VERSION: ${R2_VERSION:-5.9.8}
         PROVISION_TOOLS: ${PROVISION_TOOLS:-0}
