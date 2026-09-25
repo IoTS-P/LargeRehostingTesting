@@ -109,6 +109,11 @@ Captured as three files because two of the changed files live in submodules:
 * `VENV_NAME=fuzzware` → `fuzzware_gdma`: the DMA-branch build must not collide with the
   vanilla `fuzzware` virtualenv — the reference server keeps `fuzzware`, `fuzzware-modeling`
   and `fuzzware_gdma` side by side, and its fuzzing configs use `fuzzware_gdma`.
+* The `fuzzware_gdma` virtualenv needs `setuptools` (pinned `<58`, like the vanilla one):
+  unicorn's Python binding imports `pkg_resources`, and without it the emulator dies before
+  executing a single instruction — the admission test then reports `Unknown Crash` for every
+  seed within a second, and the fuzzing stages see no fixture. `scripts/setup_tools.sh`
+  installs it into both venvs (`ensure_fuzzware_python_deps <venv>`).
 * `mkvirtualenv -p /usr/bin/python3.10` (was `/usr/bin/python3`) and
   `MODELING_VENV_PYTHON3=/usr/bin/python3.10` — newer python breaks the pinned angr used by the
   modeling component.
