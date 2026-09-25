@@ -85,8 +85,10 @@ reference container had installed interactively on top of it:
   `cmdPredo: "source ~/.zshrc && source …/virtualenvwrapper.sh"`,
 * rustup for hoedur / MultiFuzz, `redis-server`, `sqlite3`, `gcc-arm-none-eabi`,
   build toolchain for the tools' native components,
-* Ghidra 12.0.4 (ghidra.jar, used by akiba) **and** Ghidra 11.3.2 (used by
-  Firmline as `ghidraHome`, matching `/data/tools/ghidra_11.3.2_PUBLIC`),
+* Ghidra 11.3.2 for both roles -- akiba's `ghidra.jar` and Firmline's
+  `ghidraHome` (matching `/data/hongyuan/ghidra_11.3.2_PUBLIC` on the server).
+  The pin is load-bearing: a newer SDK (12.0.4) changes stage 01's `entry_valid`
+  verdicts for 15 of the 34 fixtures, see §5,
 * sshd, so the container can be driven like the server (host port 31779).
 
 Differences worth knowing: the server's `docker-compose.yml` binds the host

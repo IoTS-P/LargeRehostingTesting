@@ -269,7 +269,7 @@ Each tool in `evaluated_tools_and_configurations/tools/` has standalone build in
 
 | Tool | Build Method | Runtime Dependencies |
 |------|-------------|---------------------|
-| FirmXRay | `make` (javac, needs ghidra.jar) | JDK 21, Ghidra 12.0.4 SDK |
+| FirmXRay | `make` (javac, needs ghidra.jar) | JDK 21, Ghidra 11.3.2 SDK |
 | Firmline | pip + bgrep make + radare2 install | Conda env (Python 3.11), Ghidra 11.3.2 headless |
 | Fuzzware | install_local.sh (virtualenvwrapper) | Virtualenvs `fuzzware` + `fuzzware-modeling`, Redis |
 | Fuzzware (GDMA) | install_local.sh (virtualenvwrapper) | Virtualenvs `fuzzware_gdma` + `fuzzware-modeling`, Redis |
@@ -297,7 +297,7 @@ evaluation_framework/scripts/build.sh
 Key characteristics:
 - Base: `ubuntu:24.04`
 - Runtime: JDK 21 (headless), PostgreSQL 16, pgbackrest
-- SDK: Ghidra 12.0.4 (ghidra.jar) + Ghidra 11.3.2 (headless for Firmline)
+- SDK: Ghidra 11.3.2 (ghidra.jar; the same release runs headless for Firmline)
 - Orchestration: Akiba framework 3.1.2 (database daemon port 31777, framework CLI)
 - Python: Miniconda with `py310` (Python 3.10) and `firmline` (Python 3.11) environments
 - Languages: Rust (latest stable), Zsh + virtualenvwrapper

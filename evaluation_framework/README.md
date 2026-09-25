@@ -33,7 +33,7 @@ wraps.
 ### `00b_analyze` — Ghidra pre-analysis (Stage 1 Reconnaissance)
 
 - modules: `ProgramInitialization`, `FunctionFinder`, `StringAdder`
-- tool: Ghidra 12.0.4 headless, driven by the framework itself
+- tool: Ghidra 11.3.2 headless, driven by the framework itself
 - run: `scripts/run_pipeline.sh --only 00b`
 - writes: `program_initialization_results`, `function_finder_results`, `string_adder_results`, and
   the Ghidra project `/data/akiba/ghidra_projects/00b_analyze` that every later stage forks ·

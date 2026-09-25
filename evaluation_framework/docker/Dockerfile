@@ -13,7 +13,7 @@
 ###############################################################################
 ARG UBUNTU_VERSION=24.04
 ARG VERSION=3.1.2
-ARG GHIDRA_VERSION=12.0.4
+ARG GHIDRA_VERSION=11.3.2
 ARG GHIDRA_FIRMLINE_VERSION=11.3.2
 ARG R2_VERSION=5.9.8
 
@@ -24,8 +24,17 @@ ARG R2_VERSION=5.9.8
 # own support/buildGhidraJar produces from a full release.  The 3.1.2 line of
 # the framework expects that jar at <subproject>/lib/ghidra.jar (see
 # framework/build.gradle.kts) and at runtime in akiba_framework/lib/.
-# Ghidra 11.3.2 is kept as a second installation because Firmline runs its own
-# headless Ghidra analysis (config key `ghidraHome`).
+# Both akiba and Firmline run against Ghidra 11.3.2, as the reference server does
+# (/data/hongyuan/ghidra_11.3.2_PUBLIC): Firmline uses it headless through the
+# `ghidraHome` config key, and akiba links it in as lib/ghidra.jar.
+# Do NOT bump this to a newer release: stage 01's `entry_valid` comes from akiba's own
+# startup emulation (FirmXRay.testBaseAddress -> StartupDynamicChecker.CheckerEmulator),
+# whose verdict is a threshold on how far that emulation gets (>=20 distinct instructions
+# and >=2 distinct functions, loosened to >=10 once the 10 000 instruction cap is
+# reached).  On Ghidra 12.0.4 the same 34 fixtures stall after 1-22 distinct instructions
+# with `distinct functions` stuck at 1, so 15 of them come out `invalid` where the server
+# says `valid`; with 11.3.2 the verdicts match the server fixture for fixture
+# (25 valid / 8 invalid / 1 failed).
 # ---------------------------------------------------------------------------
 FROM ubuntu:${UBUNTU_VERSION} AS ghidra
 ARG GHIDRA_VERSION
@@ -36,7 +45,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 RUN set -eux; \
     mkdir -p /opt/ghidra; cd /opt/ghidra; \
-    for v in "${GHIDRA_VERSION}" "${GHIDRA_FIRMLINE_VERSION}"; do \
+    for v in $(printf '%s\n' "${GHIDRA_VERSION}" "${GHIDRA_FIRMLINE_VERSION}" | sort -u); do \
       url="$(curl -fsSL "https://api.github.com/repos/NationalSecurityAgency/ghidra/releases/tags/Ghidra_${v}_build" \
              | grep -o 'https://[^"]*\.zip' | head -1)"; \
       test -n "$url"; \
