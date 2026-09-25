@@ -1,5 +1,5 @@
---- tools/fuzzware/pipeline/fuzzware_pipeline/pipeline.py	2026-09-20 21:19:24.103570200 +0800
-+++ /tmp/admission_extract/fuzzware/pipeline.py	2026-04-17 16:22:53.320172100 +0800
+--- tools/fuzzware/pipeline/fuzzware_pipeline/pipeline.py
++++ /tmp/admission_extract/fuzzware/pipeline.py
 @@ -1,9 +1,14 @@
  import glob
  import hashlib
@@ -112,7 +112,7 @@
          logger.info("Adding pipeline level observers")
          self.add_mmio_state_observer()
          self.add_config_snippets_observer()
-@@ -300,6 +368,36 @@
+@@ -300,6 +368,40 @@
          self.parse_pipeline_yml_config(config_map)
          self.parse_ground_truth_files()
  
@@ -143,7 +143,11 @@
 +            sys.exit(1)
 +            
 +        logger.info("All initial seeds passed admission test. Proceeding to Session 0.")
-+        sys.exit(0)
++        # Only an admission check stops here.  A normal fuzzing run (stages 03/05) continues into
++        # the sessions below; the admission tasks in 02b export FUZZWARE_ADMISSION_ONLY=1 so that
++        # they return as soon as the seeds have been judged.
++        if os.environ.get("FUZZWARE_ADMISSION_ONLY", "") not in ("", "0", "false", "False"):
++            sys.exit(0)
 +
 +
      def request_shutdown(self):

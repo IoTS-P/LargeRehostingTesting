@@ -60,7 +60,7 @@
     "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
     "regenerateConfig": true,
     "projectRoot": "fuzzware_projects",
-    "venv": "fuzzware"
+    "venv": "fuzzware_gdma"
   },
   "FirmRCA": {
     "firmRCARoot": "/data/tools/FirmRCA",

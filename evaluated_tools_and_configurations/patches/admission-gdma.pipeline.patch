@@ -1,5 +1,5 @@
---- tools/gdma/pipeline/fuzzware_pipeline/pipeline.py	2026-09-20 12:27:58.399504200 +0800
-+++ /tmp/admission_extract/fuzzware-gdma/pipeline.py	2026-04-17 16:20:50.402350400 +0800
+--- tools/gdma/pipeline/fuzzware_pipeline/pipeline.py
++++ /tmp/admission_extract/fuzzware-gdma/pipeline.py
 @@ -1,9 +1,14 @@
  import glob
  import hashlib
@@ -232,7 +232,7 @@
          logger.info("Adding pipeline level observers")
          self.add_mmio_state_observer()
          self.add_config_snippets_observer()
-@@ -297,26 +359,54 @@
+@@ -297,26 +359,56 @@
          save_config(config_map, new_config_path)
          assert os.path.isfile(new_config_path)
  
@@ -287,13 +287,15 @@
 +            sys.exit(1)
 +            
 +        logger.info("All initial seeds passed admission test. Proceeding to Session 0.")
-+        # sys.exit(0)
++        # Only an admission check stops here (see the vanilla tree); normal fuzzing continues.
++        if os.environ.get("FUZZWARE_ADMISSION_ONLY", "") not in ("", "0", "false", "False"):
++            sys.exit(0)
 +
 +
      def request_shutdown(self):
          logger.info("Shutdown requested!")
          self.shutdown_requested = True
-@@ -341,13 +431,10 @@
+@@ -341,13 +433,10 @@
          os.mkdir(self.logs_dir)
          os.mkdir(necessary_data_dir(self.base_dir))
          os.mkdir(self.stats_dir)
@@ -307,7 +309,7 @@
  
          logger.set_output_file(self.base_dir, 'pipeline')
          logger.info(f"logging pipeline output to: {logger.output_file}.log")
-@@ -360,11 +447,6 @@
+@@ -360,11 +449,6 @@
          self.copy_necessary_files(files_to_copy)
          return config_map
  
@@ -319,7 +321,7 @@
      # We store the planned run time as well as actual start time
      def runtime_log_create(self, planned_runtime):
          with open(runtime_log_path_for_proj(self.base_dir), "w") as f:
-@@ -386,12 +468,11 @@
+@@ -386,12 +470,11 @@
      def find_necessary_files(self, config_map):
          files_to_copy = []
  
@@ -335,7 +337,7 @@
  
          for item in ['memory_map']:
              for name, entry in config_map[item].items():
-@@ -400,12 +481,12 @@
+@@ -400,12 +483,12 @@
                          if os.path.isabs(entry['file']):
                              filename = entry['file']
                              files_to_copy.append(filename)
@@ -351,7 +353,7 @@
  
                          associated_elf = filename[:-4] + ".elf"
                          if os.path.isfile(associated_elf):
-@@ -449,7 +530,6 @@
+@@ -449,7 +532,6 @@
              self.warnings_file.close()
          self.input_creation_times_file.close()
          self.job_timings_file.close()
@@ -359,7 +361,7 @@
  
      def is_successfully_booted(self, bbl_set):
          # Has booted basic block config and that basic block is hit
-@@ -459,7 +539,7 @@
+@@ -459,7 +541,7 @@
                  (not self.boot_required_bbls - bbl_set)
          )
  
@@ -368,7 +370,7 @@
          """
          Determines different sets of input file paths, ordered by desirability
  
-@@ -472,10 +552,7 @@
+@@ -472,10 +554,7 @@
          new_mmio_or_boot = []
          # All unique inputs
          unique = []
@@ -380,7 +382,7 @@
              # Follow-up session, select input files from existing fuzzer session
              # 1. collect all new config snippets (compare previous session config.yml to new session config_map) and get their context tuples (pc, lr)
              # 2. make sure not include duplicates
-@@ -498,7 +575,7 @@
+@@ -498,7 +577,7 @@
                      else:
                          continue
  
@@ -389,7 +391,7 @@
                      if not os.path.isfile(bbl_set_path):
                          if self.num_main_fuzzer_procs == 1:
                              self.add_warning_line("[add_main_session] Could not find trace files for input path '{}'".format(input_path))
-@@ -523,7 +600,7 @@
+@@ -523,7 +602,7 @@
  
          return [l for l in input_candidate_lists if l]
  
@@ -398,7 +400,7 @@
          config_map = deepcopy(self.default_config_map)
          # merge into the config map all other optional config files: mmio, exit, main_snippets
          mmio_model_config_map = load_config_deep(self.mmio_model_config_path)
-@@ -534,11 +611,6 @@
+@@ -534,11 +613,6 @@
                  config_map['mmio_models'] = {}
              add_config_entries(config_map['mmio_models'], [mmio_model_config_map['mmio_models']])
  
@@ -410,7 +412,7 @@
          exitat_config_map = load_config_deep(self.exit_at_config_path)
          if exitat_config_map:
              # merge exit_at configs into base file
-@@ -560,12 +632,12 @@
+@@ -560,12 +634,12 @@
              prefix_input_candidate = self.curr_main_session.prefix_input_path
  
          self.curr_main_sess_index += 1
@@ -425,7 +427,7 @@
              # We have previous inputs, carry them over
              logger.debug("Copying over {} inputs".format(len(input_path_list)))
  
-@@ -589,13 +661,11 @@
+@@ -589,13 +663,11 @@
          num_dead_fuzzer_restarts = 0
          num_config_updates = 0 # Types of config updates, new/modified: 1. MMIO models, 2. exit-at, 3. state, 4. systick enabled
          restart_pending = False
@@ -441,7 +443,7 @@
          current_time = time.time()
          while True:
              if self.shutdown_requested and not restart_pending:
-@@ -628,7 +698,7 @@
+@@ -628,7 +700,7 @@
                      logger.debug(f"New Fuzzing input. {session_name} -> {fuzzer_instance_name}: {input_filename}")
                      idle_count = 0
                      self.known_input_hashes[session_name].add(new_hash)
@@ -450,7 +452,7 @@
                      self.worker_pool.enqueue_job_trace_gen(fuzz_input_path)
  
                  if had_to_wait:
-@@ -642,6 +712,7 @@
+@@ -642,6 +714,7 @@
                  logger.debug(f"Got MMIO state: {mmio_state_filename}")
                  if not self.disable_modeling:
                      self.worker_pool.enqueue_job_analyze_model(mmio_state_filename, mmio_state_path)
@@ -458,7 +460,7 @@
              except queue.Empty:
                  pass
  
-@@ -653,62 +724,35 @@
+@@ -653,62 +726,35 @@
                  logger.info(f"New MMIO model: {config_snippet_filename}")
  
                  merge_config_file_into(self.mmio_model_config_path, config_path)
@@ -533,7 +535,7 @@
  
                          logger.debug("Looking at new translation block set")
                          new_bbs = bbl_set - self.visited_translation_blocks
-@@ -727,20 +771,11 @@
+@@ -727,20 +773,11 @@
                                      logger.info(f"New translation block: 0x{pc:08x}{sym_suffix}")
                                  if self.groundtruth_milestone_basic_blocks and pc in self.groundtruth_milestone_basic_blocks:
                                      logger.info(f"Discovered milestone basic block: 0x{pc:08x}{sym_suffix}")
@@ -555,7 +557,7 @@
                              pending_prefix_candidate = input_for_trace_path(trace_file_path)
                              restart_pending = True
                              self.curr_main_session.kill_fuzzers()
-@@ -778,13 +813,11 @@
+@@ -778,13 +815,11 @@
                              # no jobs are present, we can fully restart now
                              restart_pending, num_config_updates = False, 0
                              self.curr_main_session.shutdown()
@@ -571,7 +573,7 @@
                                  logger.info("Waiting for leftover jobs ({}) to finish...".format(len(self.worker_pool.jobs)))
                                  self.worker_pool.check_lost_jobs()
                      else:
-@@ -804,19 +837,6 @@
+@@ -804,19 +839,6 @@
                                  self.add_warning_line("[ERROR] Too many fuzzer sessions died, exiting")
                                  self.request_shutdown()
  
@@ -591,7 +593,7 @@
              # Do we have config updates?
              if (not restart_pending) and num_config_updates != 0 and (
                  # We have a huge number of config updates
-@@ -846,8 +866,6 @@
+@@ -846,8 +868,6 @@
          trace_gen_job_count = len(self.worker_pool.job_queue_trace_gen)
          model_gen_job_count = len(self.worker_pool.job_queue_modeling)
          state_gen_job_count = len(self.worker_pool.job_queue_state_gen)
@@ -600,7 +602,7 @@
          log_string = f"Current Pipeline Status (main{self.curr_main_sess_index:03d})\n"
          if self.groundtruth_valid_basic_blocks:
              num_covered_bbs, num_valid_bbs = len(self.visited_valid_basic_blocks), len(self.groundtruth_valid_basic_blocks)
-@@ -859,7 +877,7 @@
+@@ -859,7 +879,7 @@
              num_covered_milestone_bbs, num_milestone_bbs = len(self.visited_milestone_basic_blocks), len(self.groundtruth_milestone_basic_blocks)
              log_string += f" Milestones covered: {num_covered_milestone_bbs} / {num_milestone_bbs} ({round(num_covered_milestone_bbs / num_milestone_bbs * 100, 2) }%)"
  

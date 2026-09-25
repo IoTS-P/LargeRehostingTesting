@@ -107,9 +107,9 @@ fixes described in the README (§A.8): the `$HOME/.akiba` symlink onto the volum
 | `00_import.json` | `dockerfile_needed/config_example.json` | import root `/data/samples` |
 | `01_firmxray.json` | `configs/1_firmxray.json` | `firmxrayRoot` → `/data/tools/FirmXRay` (the enhanced variant, which 1_firmxray.json already used via `RealworldFirmware/FirmXRay`), constraint `format = 'Raw Binary'` instead of the `arch = 'ARM:LE:32:v8T'`-only filter |
 | `02_firmline.json` | `configs/12_firmline.json` | `ghidraHome` → `/opt/ghidra/ghidra_11.3.2_PUBLIC`, conda paths → `/opt/conda` |
-| `03_fuzzware.json` | `configs/config_fw_only.json` | constraint `id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)` instead of the hard-coded 27-id list; project root renamed |
-| `04_hoedur.json` | `configs/config_hoedur_on_firmxray.json` | constraint as above instead of the `hoedur_admission_checks_v2` sub-select (admission tests are separate stages there, see `configs/config_*_admission.json` on the server) |
-| `05_multifuzz.json` | `configs/config_multifuzz_allinone.json` | constraint as above instead of `multifuzz_admission_checks_v2` |
+| `03_fuzzware.json` | `configs/config_fuzzware_on_gdma_2.json` (fuzzing premise) + `config_fw_only.json` (project layout) | constraint `id IN (SELECT id FROM fuzzware_admission_checks_v2 WHERE result = 'PASSED')` instead of the hard-coded 27-id list `config_fw_only.json` carries (that list is one per-run subset of the same set); `venv` → `fuzzware_gdma`; project root renamed |
+| `04_hoedur.json` | `configs/config_hoedur_on_firmxray.json` | constraint `id IN (SELECT id FROM hoedur_admission_checks_v2 WHERE result = 'PASSED')`, i.e. the server's admission gate (its admission configs are `configs/config_*_admission.json`) |
+| `05_multifuzz.json` | `configs/config_multifuzz_allinone.json` | constraint `id IN (SELECT id FROM multifuzz_admission_checks_v2 WHERE result = 'PASSED')`; `venv` → `fuzzware_gdma` (the gateway the server's MultiFuzz config uses) |
 | `06_firmrca.json` | `configs/3_firmxray_on_firmrca.json` | crash source view `firmxray_fuzzware_replay_crashes` (this repo) instead of `firmxray_on_gdma_replay_crashes`; `classifiedMode: false` for the first pass; `dbImports` reduced to `firmxray_results.base_address` |
 | `06b_firmrca_classify.json` | derived from the same server config | second pass with `classifiedMode: true` and `dbImports` including `firmrca_classified_replays.paths` |
 

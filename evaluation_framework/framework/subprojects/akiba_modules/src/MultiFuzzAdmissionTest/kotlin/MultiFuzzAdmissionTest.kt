@@ -107,7 +107,8 @@ class MultiFuzzAdmissionTest(
             throw IllegalStateException("MultiFuzz binary not found at ${multiFuzzBin.absolutePathString()}")
         }
 
-        val runCmd = "export WORKDIR=\"${outputDir.absolutePathString()}\" && " +
+        val runCmd = "${conf.cmdPredo} && " +
+                "export WORKDIR=\"${outputDir.absolutePathString()}\" && " +
                 "export LD_LIBRARY_PATH=\"${multiFuzzReleaseDir.absolutePathString()}:\$LD_LIBRARY_PATH\" && " +
                 "export GHIDRA_SRC=\"${multiFuzzRootDir.resolve("ghidra").absolutePathString()}\" && " +
                 "${multiFuzzBin.absolutePathString()} " +

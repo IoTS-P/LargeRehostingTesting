@@ -74,15 +74,15 @@
     "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
     "regenerateConfig": true,
     "projectRoot": "fuzzware_projects",
-    "venv": "fuzzware"
+    "venv": "fuzzware_gdma"
   },
   "FuzzwareAdmissionTest": {
     "cmdPrefix": [
       "/bin/zsh",
       "-ic"
     ],
-    "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
-    "venv": "fuzzware",
+    "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh && export FUZZWARE_ADMISSION_ONLY=1",
+    "venv": "fuzzware_gdma",
     "projectRoot": "fuzzware_admission_test"
   },
   "HoedurAdmissionTest": {
@@ -91,7 +91,7 @@
       "-ic"
     ],
     "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
-    "venv": "fuzzware",
+    "venv": "fuzzware_gdma",
     "projectRoot": "hoedur_admission_test",
     "hoedurRoot": "/data/tools/hoedur",
     "cargoPath": "/home/akiba/.cargo/bin/cargo",
@@ -102,7 +102,7 @@
       "/bin/zsh",
       "-ic"
     ],
-    "cmdPredo": "source ~/.zshrc",
+    "cmdPredo": "source ~/.zshrc && export MULTIFUZZ_ADMISSION_ONLY=1",
     "projectRoot": "multifuzz_admission_test",
     "multiFuzzRoot": "/data/tools/MultiFuzz",
     "cargoPath": "/home/akiba/.cargo/bin/cargo",

@@ -2,7 +2,7 @@
   "metadata": {
     "description": "Stage 3 Security Testing (FuzzwareGateway = Stage 2 Emulation) \u2014 Hoedur: FuzzwareGateway prepares the per-firmware project, HoedurFuzz runs the hoedur fuzzer, HoedurStatistics summarises the run. Tables: hoedur_fuzz_results, hoedur_statistics_results.",
     "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/04_hoedur.json@/main > /data/results/logs/04_hoedur.log 2>&1 &",
-    "constraint": "WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)"
+    "constraint": "WHERE id IN (SELECT id FROM hoedur_admission_checks_v2 WHERE result = 'PASSED')"
   },
   "main": {
     "username": "akiba",
@@ -30,7 +30,7 @@
       "serverIP": "127.0.0.1",
       "serverPort": "31777",
       "useSnapshot": "current",
-      "constraint": "WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)",
+      "constraint": "WHERE id IN (SELECT id FROM hoedur_admission_checks_v2 WHERE result = 'PASSED')",
       "disableUpdate": false
     },
     "dbImports": [
@@ -67,7 +67,7 @@
     "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
     "regenerateConfig": true,
     "projectRoot": "hoedur_projects",
-    "venv": "fuzzware"
+    "venv": "fuzzware_gdma"
   },
   "HoedurFuzz": {
     "hoedurRoot": "/data/tools/hoedur",

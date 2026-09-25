@@ -48,7 +48,7 @@ wraps.
 - run inside the module: `java -cp out:lib/ghidra.jar:lib/json.jar main.Main <firmware> Nordic`
 - writes: `firmxray_results` (`base_address`, `entry_valid`, `err_msg`) ·
   log: `logs/01_01_firmxray.log`
-- downstream: `base_address IS NOT NULL` is the constraint of every later stage
+- downstream: `base_address` feeds every emulation stage; `entry_valid = 'valid'` is the premise of 02b, and 03-05 select `result = 'PASSED'` from 02b's tables
 
 ### `02_firmline` — generic firmware analysis (Stage 1)
 
