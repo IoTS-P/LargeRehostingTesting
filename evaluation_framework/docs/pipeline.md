@@ -30,8 +30,9 @@ wraps, so the tool's own output directories end up under
 The base address is the pivot of the whole pipeline: fuzzware, hoedur and
 MultiFuzz all rebase the firmware before emulating it, and they all read this
 table (`dbImports: ["firmxray_results.base_address"]`). Firmwares for which
-FirmXRay fails get `err_msg = 'failed'` and are excluded from the later stages by
-the `base_address IS NOT NULL` constraint.
+FirmXRay fails get `err_msg = 'failed'`. The base address is what the emulation stages
+rebase with; `entry_valid` is the premise of the admission stage (02b), and 02b's verdict
+is the premise of the fuzzing stages (03-05) - the same chain the reference server runs.
 
 ## Stage 02b — Admission (Stage 2 Emulation: seed admission)
 
@@ -49,14 +50,17 @@ the `base_address IS NOT NULL` constraint.
 `result` is `PASSED`, `FAILED_*` or `NOT_RUN`/`RUNTIME_ERROR`; `detail` carries the
 per-seed `[ADMISSION]` lines the fuzzer printed. This is the stage that decides how
 many samples of a corpus are fuzzable at all, so run it before the fuzzing stages.
-Admission is *reported*, not enforced: the fuzzing stages keep their
-`base_address IS NOT NULL` constraint. To use it as a gate, replace that constraint
-in `03_fuzzware.json`, `04_hoedur.json` and `05_multifuzz.json` with, for example:
+Admission is the gate of the fuzzing stages, as on the reference server: 02b requires
+FirmXRay's `entry_valid = 'valid'`, and `03_fuzzware.json`, `04_hoedur.json` and
+`05_multifuzz.json` require the verdict of their own admission table:
 
 ```sql
-WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)
-  AND id IN (SELECT id FROM fuzzware_admission_results WHERE result = 'PASSED')
+WHERE id IN (SELECT id FROM fuzzware_admission_checks_v2  WHERE result = 'PASSED')
+WHERE id IN (SELECT id FROM hoedur_admission_checks_v2    WHERE result = 'PASSED')
+WHERE id IN (SELECT id FROM multifuzz_admission_checks_v2 WHERE result = 'PASSED')
 ```
+
+A firmware whose fuzzer rejects the initial seeds is therefore never fuzzed.
 
 **Where the verdicts come from.** The pre-check is part of the tools: the nine
 `evaluated_tools_and_configurations/patches/admission-*.patch` files make fuzzware, gdma,
@@ -85,8 +89,9 @@ otherwise fail with an unreadable-tool error).
 
 `FuzzwareGateway` prepares a project per firmware under
 `akiba_data/binaries/fuzzware_projects/<id>/`: it copies the (rebased) firmware,
-generates `config.yml` and calls the fuzzware pipeline inside the `fuzzware`
-virtualenv. Then:
+generates `config.yml` and calls the fuzzware pipeline inside the `fuzzware_gdma`
+virtualenv - the DMA-capable build the reference server fuzzes with (`venv:
+"fuzzware_gdma"` in its `config_fuzzware_on_gdma_2.json`). Then:
 
 * `FirmXRayOnFuzzware` — the fuzzing run (`maxTimeout` per firmware) →
   `firmxray_on_fuzzware_results` (execs, coverage, crash counts);

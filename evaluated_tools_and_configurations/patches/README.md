@@ -66,6 +66,17 @@ admission_mode`, then `E0583` + the `itertools` hint in `hoedur-analyze`).
 `admission-hoedur.modeling.patch` is the one that counts; the `hoedur-analyze` copy stays
 upstream. `cargo build --release` succeeds with it applied.
 
+**Admission mode is gated; a fuzzing run is not.** The archive's admission code stopped the
+patched fuzzware pipeline as soon as it had judged the seeds (an unconditional `sys.exit(0)`,
+and the equivalent dead-code `return Ok(())` in `hail-fuzz`), so *any* fuzzing run that used
+the patched tree ended after its first admission check - stage 03 measured 3-4 s of
+`actual_fuzz_time` and zero coverage. Both tools now stop only in admission mode:
+`FUZZWARE_ADMISSION_ONLY=1` (fuzzware, gdma) and `MULTIFUZZ_ADMISSION_ONLY=1` (MultiFuzz) are
+exported by the admission tasks in `02b_admission.json`, and a run without the variable falls
+through into the fuzzing loop. `MultiFuzzAdmissionTest` also has to prepend `cmdPredo` to the
+command it builds: it used only `cmdPrefix` before, so the variable never reached `hail-fuzz`
+and the admission task fuzzed for the whole `runFor` budget instead of returning.
+
 ## What each patch changes and why
 
 ### firmline
@@ -96,8 +107,8 @@ Captured as three files because two of the changed files live in submodules:
 
 ### gdma — fuzzware on the `DMA` branch (`install_local.sh`, `modeling/setup.sh`)
 * `VENV_NAME=fuzzware` → `fuzzware_gdma`: the DMA-branch build must not collide with the
-  vanilla `fuzzware` virtualenv, which the pipeline's fuzzware stages use — the reference server
-  keeps `fuzzware`, `fuzzware-modeling` and `fuzzware_gdma` side by side.
+  vanilla `fuzzware` virtualenv — the reference server keeps `fuzzware`, `fuzzware-modeling`
+  and `fuzzware_gdma` side by side, and its fuzzing configs use `fuzzware_gdma`.
 * `mkvirtualenv -p /usr/bin/python3.10` (was `/usr/bin/python3`) and
   `MODELING_VENV_PYTHON3=/usr/bin/python3.10` — newer python breaks the pinned angr used by the
   modeling component.

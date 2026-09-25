@@ -1,5 +1,5 @@
---- tools/MultiFuzz/hail-fuzz/src/main.rs	2026-09-19 08:08:10.257824000 +0800
-+++ /tmp/admission_extract/multifuzz/main.rs	2026-04-17 16:25:50.753196800 +0800
+--- tools/MultiFuzz/hail-fuzz/src/main.rs
++++ /tmp/admission_extract/multifuzz/main.rs
 @@ -22,6 +22,9 @@
      time::Duration,
  };
@@ -112,12 +112,17 @@
  fn run() -> anyhow::Result<()> {
      if let Some(path) = std::env::var_os("GENCONFIG") {
          return genconfig::generate_and_save(path.as_ref(), false);
-@@ -139,6 +228,9 @@
+@@ -139,6 +228,14 @@
          format!("Failed to initialize working directory at: {}", config.workdir.display())
      })?;
  
 +    perform_strict_admission(&config)?;
-+    return Ok(());
++    // Only an admission check stops here - the admission tasks of stage 02b export
++    // MULTIFUZZ_ADMISSION_ONLY=1.  A normal fuzzing run (stage 05) falls through into the fuzzing
++    // loop below, which was unreachable while this returned unconditionally.
++    if std::env::var_os("MULTIFUZZ_ADMISSION_ONLY").is_some() {
++        return Ok(());
++    }
 +
      let global_queue = Arc::new(GlobalQueue::init(config.fuzzer.workers as usize));
      if config.fuzzer.resume {

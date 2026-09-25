@@ -2,7 +2,7 @@
   "metadata": {
     "description": "Stage 3 Security Testing (FuzzwareGateway = Stage 2 Emulation) \u2014 Fuzzware: FuzzwareGateway prepares one fuzzware project per firmware (rebase from firmxray_results.base_address), then fuzzing (FirmXRayOnFuzzware), crash replay (FirmXRayOnFuzzwareReplay) and statistics (FuzzwareStat). Tables: firmxray_on_fuzzware_results, firmxray_on_fuzzware_replay_results, firmxray_on_fuzzware_stat_results, view firmxray_fuzzware_replay_crashes.",
     "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/03_fuzzware.json@/main > /data/results/logs/03_fuzzware.log 2>&1 &",
-    "constraint": "WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)"
+    "constraint": "WHERE id IN (SELECT id FROM fuzzware_admission_checks_v2 WHERE result = 'PASSED')"
   },
   "main": {
     "username": "akiba",
@@ -30,7 +30,7 @@
       "serverIP": "127.0.0.1",
       "serverPort": "31777",
       "useSnapshot": "current",
-      "constraint": "WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)",
+      "constraint": "WHERE id IN (SELECT id FROM fuzzware_admission_checks_v2 WHERE result = 'PASSED')",
       "disableUpdate": false
     },
     "dbImports": [
@@ -74,7 +74,7 @@
     "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
     "regenerateConfig": true,
     "projectRoot": "fuzzware_projects",
-    "venv": "fuzzware"
+    "venv": "fuzzware_gdma"
   },
   "FirmXRayOnFuzzware": {
     "maxTimeout": "00:01:00:00",
