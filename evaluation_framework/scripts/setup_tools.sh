@@ -167,7 +167,7 @@ provision_fuzzware() {
     && c_green "fuzzware: ok (venvs fuzzware, fuzzware-modeling)" \
     || c_red "fuzzware: venvs missing, check the log"
   link_venv_package fuzzware "$root"
-  ensure_fuzzware_python_deps
+  ensure_fuzzware_python_deps fuzzware
   link_tool_clis
 }
 
@@ -188,6 +188,7 @@ provision_gdma() {
     && c_green "gdma: ok (venvs fuzzware_gdma, fuzzware-modeling)" \
     || c_red "gdma: venvs missing, check the log"
   link_venv_package fuzzware_gdma "$root"
+  ensure_fuzzware_python_deps fuzzware_gdma
   link_tool_clis
 }
 
@@ -348,9 +349,15 @@ link_hoedur_bins() {
 # virtualenv*, whose dependencies do not include psutil: without it the fuzz stage
 # dies with ModuleNotFoundError and the statistics task then fails with
 # "No corpus file found".
+# <venv name>; the venv the fuzzware pipeline runs in needs setuptools: unicorn's Python
+# binding imports pkg_resources, and without it every emulation dies instantly (the admission
+# test then reports "Unknown Crash" for all seeds and the fuzzing stages see no fixtures).
+# The patched install_local.sh files pin setuptools<58 for the pinned unicorn/angr; psutil and
+# PyYAML are used by the pipeline and the modules.
 ensure_fuzzware_python_deps() {
-  [ -x "$WORKON_HOME/fuzzware/bin/pip" ] || return 0
-  run_logged fuzzware "$WORKON_HOME/fuzzware/bin/pip" install --no-input -q psutil PyYAML || true
+  local v="${1:-fuzzware}"
+  [ -x "$WORKON_HOME/$v/bin/pip" ] || return 0
+  run_logged "$v" "$WORKON_HOME/$v/bin/pip" install --no-input -q "setuptools<58" psutil PyYAML || true
 }
 
 link_tool_clis() {
