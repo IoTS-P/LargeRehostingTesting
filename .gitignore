@@ -124,3 +124,6 @@ autom4te.cache/
 *.log
 .DS_Store
 ._*
+
+# agent scratch used by scripts/firmrca_sampling.py
+.hermes-cache/

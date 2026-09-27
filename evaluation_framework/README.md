@@ -109,6 +109,13 @@ wraps.
   logs: `logs/06_06_firmrca.log`, `logs/06b_06b_firmrca_classify.log`
 - when no crash input reaches the 0.1 threshold the stage stops with
   `Empty query results, quit immediately` — a valid outcome, not a failure
+- **reference only.** The stock module was written to lift the **cov > 0.2** crashes and run
+  FirmRCA on those; the paper's 0.1 selection is an order of magnitude larger than that path was
+  built for, and its classify pass expects an input table (`firmrca_classified_replays`, `(id, paths)`)
+  that the authors fill outside these configs. The artifact therefore performs the 0.1 sampling with
+  `scripts/firmrca_sampling.py`, which drives the same two steps — dataset generation through
+  FirmRCA's **own** fuzzware harness, then `reversenolog` — and writes
+  `evaluation_results/db/firmrca_sampling.csv`
 
 ### `smoke_test` — container self-check
 
@@ -186,6 +193,7 @@ scripts/smoke_test.sh                     # container-only check: built-in ELF +
 | `setup_tools.sh` | container | provisions the six evaluated tools into `/data/tools` (survives rebuilds); logs per tool | `scripts/setup_tools.sh --check` / `scripts/setup_tools.sh gdma hoedur` |
 | `rebuild_framework.sh` | host | rebuilds framework/db-daemon/module JARs from the mounted sources and reinstalls them. It uses `/opt/gradle-8.8` when that path exists and otherwise `./gradlew`; either way Maven Central has to be reachable, and the wrapper fallback additionally needs the Gradle distribution (which the wrapper downloads on first use) | `scripts/rebuild_framework.sh --modules-only` |
 | `build_akiba_modules.py` | container | builds every module JAR from source in dependency order (used by the image build too) | `python3 build_akiba_modules.py` |
+| `firmrca_sampling.py` | host | standalone FirmRCA pass: one crash input per (firmware, pc, lr) with `basic_block_cov >= --threshold` (default 0.1) taken from the exported crash table, then the dataset step (FirmRCA's own fuzzware harness → `instlist.reverse`) and `reversenolog` per input; writes `evaluation_results/db/firmrca_sampling.csv` in the shape of the reference run's `firmxray_on_gdma_firmrca_results`. Takes the place of stages 06/06b, whose stock module only lifts the cov>0.2 crashes | `scripts/firmrca_sampling.py --ids 29 --max-inputs 1` |
 | `run_pipeline.sh` | host or container | the stage runner: `--list`, `--only`, `--skip`, `--restore`, `--fuzz-time`; exports after every stage; refuses to start when the `/data` bind mounts are stale | `scripts/run_pipeline.sh --only 02b` |
 | `import_samples.sh` | container | imports every firmware under `/data/samples` into the akiba instance (`--list` to preview) | `scripts/import_samples.sh --list` |
 | `fetch_samples_gdrive.sh` | host | downloads the published sample set from a Drive link/folder/file id into `evaluation_samples/` | `scripts/fetch_samples_gdrive.sh <url> --dry-run` |
