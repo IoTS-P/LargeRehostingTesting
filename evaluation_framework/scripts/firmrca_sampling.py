@@ -87,12 +87,16 @@ def load_inputs(args) -> list[dict]:
     # one input per (id, pc, lr), highest coverage first
     rows.sort(key=lambda r: -r["cov"])
     seen: set[tuple[str, str, str]] = set()
+    per: dict[str, int] = {}
     uniq: list[dict] = []
     for r in rows:
         key = (r["id"], r["pc"], r["lr"])
         if key in seen:
             continue
+        if args.per_firmware and per.get(r["id"], 0) >= args.per_firmware:
+            continue
         seen.add(key)
+        per[r["id"]] = per.get(r["id"], 0) + 1
         uniq.append(r)
     return uniq[: args.max_inputs] if args.max_inputs else uniq
 
@@ -210,7 +214,9 @@ def main() -> int:
     ap.add_argument("--container", default=os.environ.get("AKIBA_CONTAINER", "largerehosting_akiba"))
     ap.add_argument("--threshold", type=float, default=0.1,
                     help="basic_block_cov cut-off for the sampling pass (default 0.1)")
-    ap.add_argument("--ids", nargs="*", help="restrict to these firmware ids")
+    ap.add_argument("--ids", nargs="*", help="restrict to these firmware ids (space or comma separated)")
+    ap.add_argument("--per-firmware", type=int, default=0,
+                    help="take at most N inputs per firmware (0 = no cap)")
     ap.add_argument("--max-inputs", type=int, default=0, help="stop after N inputs (0 = all)")
     ap.add_argument("--timeout", type=int, default=600, help="per-input FirmRCA timeout (s)")
     ap.add_argument("--dataset-timeout", type=int, default=900, help="per-input dataset timeout (s)")
@@ -220,6 +226,9 @@ def main() -> int:
     ap.add_argument("--out", default=str(DEFAULT_OUT))
     ap.add_argument("--dry-run", action="store_true", help="resolve inputs and print the commands only")
     args = ap.parse_args()
+    # `--ids 24,29` is one argv entry, so split on commas as well
+    if args.ids:
+        args.ids = [x for entry in args.ids for x in entry.replace(" ", "").split(",") if x]
 
     cache = REPO / ".hermes-cache"
     prepare(args.container, cache)
