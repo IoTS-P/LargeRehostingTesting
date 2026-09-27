@@ -72,6 +72,11 @@ The full evaluation (4,571 firmware samples, three fuzzers, one hour of fuzzing 
 
 - CPU: x86-64 with at least 64 cores
 - Memory: at least 100 GB of RAM
+- `main.general.threads` in `pipeline_configs/*` has to stay **below** the core count: the shipped
+  32 / 24 / 48 are the reference run's values, so the ≥64 cores above are a floor, not a target.
+  On a smaller host the framework deadlocks silently (nothing in the log); `scripts/run_pipeline.sh`
+  warns before such a stage starts, and the exported results in this package were produced with
+  `threads = 16` on a 24-core host.
 - Parallelism: at least 32 concurrent fuzzing instances
 - Storage: at least 2 TB of free space for the firmware, the intermediate testing files, the trace files, the logs and the fuzzing results
 

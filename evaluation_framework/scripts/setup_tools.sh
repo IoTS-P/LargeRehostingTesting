@@ -232,17 +232,40 @@ provision_firmrca() {
   local root="$TOOLS_ROOT/FirmRCA"
   c_blue "==> FirmRCA (capstone, capnproto, pomp; own venv for its fuzzware fork)"
   [ -d "$root" ] || { c_red "    $root missing"; return 1; }
-  [ "$CHECK_ONLY" = 1 ] && { c_blue "    check: $root/FirmRCA-fuzzware/bin/activate, src/src/*, libcapnproto.so"; return 0; }
+  [ "$CHECK_ONLY" = 1 ] && { c_blue "    check: $root/FirmRCA-fuzzware/bin/fuzzware_harness, $root/fuzzware-emulator/unicorn/fuzzware-unicorn/libunicorn.so, $root/fuzzware-emulator/harness/fuzzware_harness/native/native_hooks.so, src/src/reversenolog, src/lib/libcapnproto.so"; return 0; }
 
-  # 1. python venv used by the module (firmRCAPythonVenvRoot)
-  if [ ! -f "$root/FirmRCA-fuzzware/bin/activate" ]; then
-    run_logged firmrca python3 -m venv "$root/FirmRCA-fuzzware" || return 1
-    run_logged firmrca "$root/FirmRCA-fuzzware/bin/pip" install --upgrade pip setuptools wheel
-    run_logged firmrca "$root/FirmRCA-fuzzware/bin/pip" install -r "$root/requirements.txt"
-    run_logged firmrca "$root/FirmRCA-fuzzware/bin/pip" install matplotlib pandas pyyaml openpyxl
-    # FirmRCA drives the fuzzware *emulator* from this repository, not the upstream one
-    run_logged firmrca bash -c "cd '$root/fuzzware-emulator' && '$root/FirmRCA-fuzzware/bin/pip' install -e ." \
-      || c_red "    installing the in-tree fuzzware-emulator failed — see README of FirmRCA"
+  # 1. python venv used by the module (firmRCAPythonVenvRoot).  It has to be python3.8: the
+  #    fuzzware fork vendored by FirmRCA is the unicorn-1.0.3 era.  A bare `python3` is conda's
+  #    3.14 in this image, where every install fails and an empty venv is left behind.
+  FIRMRCA_PYTHON=/usr/bin/python3.8
+  [ -x "$FIRMRCA_PYTHON" ] || { c_red "    $FIRMRCA_PYTHON missing (the interpreter FirmRCA's fork needs)"; return 1; }
+  if [ ! -x "$root/FirmRCA-fuzzware/bin/fuzzware_harness" ]; then
+    run_logged firmrca "$FIRMRCA_PYTHON" -m venv "$root/FirmRCA-fuzzware" || return 1
+    run_logged firmrca "$root/FirmRCA-fuzzware/bin/pip" install --upgrade "setuptools<58" wheel pip
+    # the fork's own dependency set (pycapnp, needed only by the capnp trace format, is skipped)
+    run_logged firmrca "$root/FirmRCA-fuzzware/bin/pip" install archinfo intelhex clint capstone IPython ipdb monkeyhex "PyYAML>=5.3" \
+      || { c_red "    installing FirmRCA's python dependencies failed"; return 1; }
+    run_logged firmrca "$root/FirmRCA-fuzzware/bin/pip" install matplotlib pandas openpyxl || true
+
+    # 1b. the harness FirmRCA vendors: its *own* unicorn (it adds --trace-out/--state-out and the
+    #     `instlist` dump the dataset step parses — the upstream and GDMA harnesses have neither)
+    #     plus its native module.  Build from a clean tree: a checkout that carries the upstream
+    #     .o files and qemu/config-host.mak is merely relinked, silently keeping instructions the
+    #     host CPU may not have (AVX-512 code from a build on a newer machine SIGILLs elsewhere).
+    UC="$root/fuzzware-emulator/unicorn/fuzzware-unicorn"
+    if [ ! -d "$UC/qemu" ]; then
+      run_logged firmrca bash -c "cd '$root/fuzzware-emulator' && git submodule update --init --recursive unicorn/fuzzware-unicorn" \
+        || { c_red "    could not fetch FirmRCA's unicorn fork"; return 1; }
+    fi
+    run_logged firmrca bash -c "cd '$UC' && rm -f qemu/config-host.mak qemu/config-host.h && make -C qemu distclean clean >/dev/null 2>&1; make clean >/dev/null 2>&1; find . -name '*.o' -delete; rm -f libunicorn.so*" || true
+    run_logged firmrca bash -c "cd '$UC' && UNICORN_ARCHS=arm make -j8 all" \
+      || { c_red "    building FirmRCA's unicorn fork failed"; return 1; }
+    run_logged firmrca bash -c "cd '$UC/bindings/python' && UNICORN_ARCHS=arm '$root/FirmRCA-fuzzware/bin/python' setup.py install" \
+      || { c_red "    installing the unicorn python bindings failed"; return 1; }
+    run_logged firmrca bash -c "cd '$root/fuzzware-emulator/harness' && '$root/FirmRCA-fuzzware/bin/pip' install -e . --no-build-isolation" \
+      || { c_red "    installing FirmRCA's harness fork failed"; return 1; }
+    run_logged firmrca bash -c "make -C '$root/fuzzware-emulator/harness/fuzzware_harness/native' clean all" \
+      || { c_red "    building FirmRCA's native harness module failed"; return 1; }
   fi
 
   # 2. capstone as a system library.  FirmRCA's sources use `insn->detail->writeback`,
@@ -272,6 +295,20 @@ provision_firmrca() {
     fi
     sudo touch "$CAPSTONE_STAMP"
   fi
+
+  # reversenolog links libcapstone.so.5 at *runtime*; a missing loader entry is exactly the
+  # "error while loading shared libraries: libcapstone.so.5" failure.  make.sh installs under
+  # /usr, so refresh the loader cache and, if the soname is still absent, install from the
+  # build tree (the stamp can exist while the install never ran).
+  run_logged firmrca sudo ldconfig || true
+  if ! ldconfig -p 2>/dev/null | grep -q "libcapstone.so.5"; then
+    if [ -d "$CAPSTONE_DIR" ]; then
+      run_logged firmrca bash -c "cd '$CAPSTONE_DIR' && sudo make install && sudo ldconfig" \
+        || { c_red "    libcapstone.so.5 could not be installed"; return 1; }
+    fi
+  fi
+  ldconfig -p 2>/dev/null | grep -q "libcapstone.so.5" \
+    || { c_red "    libcapstone.so.5 is not in the loader path — reversenolog will not run"; return 1; }
 
   # 3. capnproto + c-capnproto + the trace library
   # README step 3: gcc the trace library and drop it into src/lib.  There is no

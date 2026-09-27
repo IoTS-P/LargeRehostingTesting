@@ -135,6 +135,16 @@ for s in "${STAGES[@]}"; do
   [ -n "$FUZZ_TIME" ] && [ -f "/data/results/generated/pipelines/$cfg" ] \
     && cfg_path="/data/results/generated/pipelines/$cfg"
   step_header "$id" "$desc  ($(basename "$cfg_path"))"
+  # The framework deadlocks *silently* when main.general.threads reaches the core count: its
+  # runBlocking database client parks every scheduler thread, so answers the daemon has already
+  # sent are never consumed and the stage hangs without a single error in its log.  Warn instead of
+  # rewriting the config — the shipped numbers are the reference run's.
+  cores=$(nproc 2>/dev/null || echo 1)
+  threads=$(python3 -c "import json;print(json.load(open('$cfg_path')).get('main',{}).get('general',{}).get('threads',''))" 2>/dev/null)
+  if [ -n "$threads" ] && [ "$threads" -ge "$cores" ] 2>/dev/null; then
+    echo "[warn] $id: main.general.threads=$threads >= $cores core(s) — this stage will hang silently."
+    echo "       Lower it in $(basename "$cfg_path") (see the hardware notes in the README)."
+  fi
   log="$RESULTS_DIR/logs/${id}_$(basename "$cfg" .json).log"
   start=$(date -Is)
   if ./bin/akiba_framework -c "$cfg_path@/main" 2>&1 | tee -a "$log"; then
