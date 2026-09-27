@@ -146,6 +146,9 @@ for s in "${STAGES[@]}"; do
     echo "       Lower it in $(basename "$cfg_path") (see the hardware notes in the README)."
   fi
   log="$RESULTS_DIR/logs/${id}_$(basename "$cfg" .json).log"
+  # stage logs are appended to across runs, so mark where this run starts: a stale FAILED /
+  # Exception line from an earlier run otherwise reads as this run's output
+  { echo; echo "===== run $(date -Is) — $desc (${cfg_path}) ====="; } >> "$log"
   start=$(date -Is)
   if ./bin/akiba_framework -c "$cfg_path@/main" 2>&1 | tee -a "$log"; then
     c_green "[$id] finished (log: $log)"
