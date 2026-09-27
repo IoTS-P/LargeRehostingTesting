@@ -300,10 +300,14 @@ provision_firmrca() {
   # "error while loading shared libraries: libcapstone.so.5" failure.  make.sh installs under
   # /usr, so refresh the loader cache and, if the soname is still absent, install from the
   # build tree (the stamp can exist while the install never ran).
-  run_logged firmrca sudo ldconfig || true
+  # `sudo` is not installed in this image: the provisioner may run as root (the image build) or as
+  # akiba (a manual run), so try both orders.  A stale loader cache is exactly what makes
+  # reversenolog fail with "libcapstone.so.5: cannot open shared object file" after a successful
+  # install, because ldconfig resolves the soname, not the file on disk.
+  run_logged firmrca bash -c "ldconfig 2>/dev/null || sudo ldconfig 2>/dev/null || true" || true
   if ! ldconfig -p 2>/dev/null | grep -q "libcapstone.so.5"; then
     if [ -d "$CAPSTONE_DIR" ]; then
-      run_logged firmrca bash -c "cd '$CAPSTONE_DIR' && sudo make install && sudo ldconfig" \
+      run_logged firmrca bash -c "cd '$CAPSTONE_DIR' && (make install || sudo make install) && (ldconfig || sudo ldconfig)" \
         || { c_red "    libcapstone.so.5 could not be installed"; return 1; }
     fi
   fi
