@@ -276,6 +276,9 @@ provision_firmrca() {
   #    tool's own directory must not gain an untracked submodule-like tree).
   CAPSTONE_COMMIT=622059530f172b1570a424e3f7ef5fda8c00dab0
   CAPSTONE_DIR="$HOME/build/capstone"
+  # The build tree lives in akiba's home volume — the only copy that survives a container rebuild —
+  # while the provisioner itself may run as root (image build) with HOME=/root, where nothing exists.
+  [ -d "$CAPSTONE_DIR" ] || CAPSTONE_DIR=/home/akiba/build/capstone
   CAPSTONE_STAMP=/usr/local/.capstone-pinned
   if [ ! -e "$CAPSTONE_STAMP" ]; then
     # the distro dev package has to go *first*: apt deletes files by package list, so
