@@ -116,6 +116,12 @@ wraps.
   `scripts/firmrca_sampling.py`, which drives the same two steps — dataset generation through
   FirmRCA's **own** fuzzware harness, then `reversenolog` — and writes
   `evaluation_results/db/firmrca_sampling.csv`
+- the module itself does run end to end once its own environment is provisioned
+  (`scripts/setup_tools.sh firmrca`): pass 1 generated the dataset and ran `reversenolog` for all
+  30 inputs of one firmware (`Successfully generated dataset` / `Successfully ran FirmRCA`) with no
+  dataset failures, and for a firmware where reversing finds no root cause it reports the same
+  outcome as `firmrca_sampling.py`. What keeps it reference-only is cost, not capability: on the
+  0.1 set one firmware selects 268 inputs at ~78 s each (~2.3 s for a short-trace firmware)
 
 ### `smoke_test` — container self-check
 
