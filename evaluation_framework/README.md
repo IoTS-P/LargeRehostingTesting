@@ -136,6 +136,35 @@ wraps.
   them itself (via sudo/root) when a container was created without them, as it also creates
   `~/p2im-py38/bin` and verifies the interpreter and the AFL environment
 
+### `03c` — µEmu (Stage 3 Security Testing, related work, run directly)
+
+- what it runs: `scripts/run_uemu_test.sh`, which drives the `uEmu-test` harness
+  (`pipeline.py`: cfg → kb → fuzz → analyze → coverage) over the ELF corpus the 03b ELF pass produced.
+  There is no akiba module and no database table here — the harness is a self-contained CLI and the
+  reference ran it directly — so the stage is a script, wired into `run_pipeline.sh` under the `03c`
+  id.  Log: `logs/03c_uemu_test.log` · results: `results/uemu_test/*.csv`.
+- input: the same `parsed_elfs` the P²IM pass reads, fed to µEmu directly with no admission premise.
+  The harness derives each `<fw>.cfg` from the ELF's LOAD segments, which needs no µEmu at all.
+- expected outcome: the corpus does not run under µEmu, and the step exists to record that.  On a stock
+  container the record runs to a specific point: `cfg` succeeds (for two firmwares,
+  `rom = 0x08000000,0x20000`, `ram = 0x20000000,0x50000`, `vtor = 0x08000000` — a 539-byte file with
+  the same five sections as the reference's 544-byte ones), the helper renders `launch-uEmu.sh`
+  (2,569 B), `uEmu-config.lua` and `library.lua` per firmware, and `kb` then reports 无KB because the
+  µEmu snapshot is source only: no `build/`, no patched `AFL/afl-fuzz`.  Building that stack needs S2E
+  (and KVM for the guest), which an artifact container cannot carry.
+- the dataset verdict itself comes from the harness's own run record on a µEmu host — the smoke batch
+  shipped with it classifies every firmware `提前退出` (`end_type = early`) with
+  `fuzzer:dry-run种子crash` and the evidence line ``Test case 'id:000000,orig:seed_alternating.bin'
+  results in a crash``: KB extraction succeeds (`有KB`, 3.8–9.7 s), then the AFL dry run on the seed
+  ends the firmware before fuzzing starts.  That is the same failure mode the P²IM stage produces on
+  this corpus, which is the point of running both.
+- environment: the harness needs Python ≤ 3.11 (`pipeline.py` and µEmu's `uEmu-helper.py` call
+  `configparser.SafeConfigParser`, removed in 3.12 — the container's default `python3` is 3.14),
+  PyYAML *and* Jinja2 (`uEmu-helper.py` renders the launch templates; its README lists only PyYAML),
+  and `pipeline.py` invokes that helper as a bare `python3`, so the chosen interpreter must also be
+  exposed as `python3` on PATH.  `scripts/run_uemu_test.sh` picks the first qualifying interpreter and
+  does exactly that; `setup_tools.sh uemu` installs the two modules into it.
+
 ### `04_hoedur` — Hoedur fuzzing (Stage 3)
 
 - modules: `FuzzwareGateway`, `HoedurFuzz`, `HoedurStatistics`

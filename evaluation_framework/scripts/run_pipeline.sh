@@ -28,6 +28,7 @@ STAGES=(
   "03|03_fuzzware.json|Stage 3 Security Testing — Fuzzware fuzzing, crash replay, statistics"
   "03b|03b_p2im_elf.json|Stage 3 Security Testing — P²IM pass 1 (related work): rebuild the ELF (threads: 1)"
   "03b|03b_p2im.json|Stage 3 Security Testing — P²IM pass 2 (related work): corpus run directly, expected not to emulate"
+  "03c|run_uemu_test.sh|Stage 3 Security Testing — µEmu (related work, run directly): uEmu-test harness over the corpus, expected not to emulate"
   "04|04_hoedur.json|Stage 3 Security Testing — Hoedur fuzzing + statistics"
   "05|05_multifuzz.json|Stage 3 Security Testing — MultiFuzz fuzzing + replay"
   "06|06_firmrca.json|Stage 4 Diagnosis — FirmRCA root-cause analysis (classify pass 1)"
@@ -132,6 +133,24 @@ rc_all=0
 for s in "${STAGES[@]}"; do
   IFS='|' read -r id cfg desc <<<"$s"
   wanted "$id" || { echo "-- skipping $id ($desc)"; continue; }
+  # 03c is not a framework config: the uEmu-test harness is a self-contained CLI and the reference
+  # ran it directly, so this stage drives it with a script instead of a module.  It writes its own
+  # CSVs (no database tables, so nothing to export) and reports an env-blocked kb step as a record,
+  # not as a stage failure.
+  if [ "$id" = "03c" ]; then
+    step_header "$id" "$desc (direct run, no module)"
+    log="$RESULTS_DIR/logs/03c_uemu_test.log"
+    { echo; echo "===== run $(date -Is) — $desc ====="; } >> "$log"
+    start=$(date -Is)
+    if bash "$(dirname "${BASH_SOURCE[0]}")/run_uemu_test.sh" ${FUZZ_TIME:+--fuzz-time "$FUZZ_TIME"} 2>&1 | tee -a "$log"; then
+      c_green "[$id] finished (log: $log)"
+    else
+      c_red "[$id] FAILED (log: $log)"
+      rc_all=1
+    fi
+    echo "[$id] $start -> $(date -Is)" >> "$RESULTS_DIR/logs/pipeline_timeline.txt"
+    continue
+  fi
   [ -f "/data/pipelines/$cfg" ] || { c_red "missing config /data/pipelines/$cfg"; rc_all=1; continue; }
   # a --fuzz-time run uses the shortened copy written above
   cfg_path="/data/pipelines/$cfg"
