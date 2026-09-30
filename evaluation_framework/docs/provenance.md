@@ -180,12 +180,19 @@ the image uses. Three observations worth keeping:
   34-firmware fixture set - 32 `FAILED_EARLY_ABORT`, 1 `SUCCESS_TIMEOUT`, all with 0 crashes and 0 hangs -
   which is the reference's corpus-wide result (`Crashes: 0, Hangs: 0`) in miniature.  A failed firmware
   does **not** abort the run: all 33 firmware were attempted after the first failure.
-* How µEmu was run — `uEmu-test` (Orantree957/uEmu-test, pinned `b8f8500e`) is a harness around the
-  µEmu snapshot (MCUSec/uEmu): `pipeline.py` runs cfg → kb → fuzz → analyze → coverage, one batch per
+* How µEmu was run — `uEmu-test` is a harness around the µEmu snapshot (MCUSec/uEmu): `pipeline.py` runs cfg → kb → fuzz → analyze → coverage, one batch per
   seed, and classifies each firmware (正常fuzz / 提前退出 / 卡死).  The reference deployment never
   carried µEmu — no config, no module, nothing under `/data` — so unlike P²IM there is no module or JAR
-  variant to reconcile; the artifact ships both trees and drives the harness directly
-  (`scripts/run_uemu_test.sh`, stage id `03c`).
+  variant to reconcile; the artifact drives the harness directly (`scripts/run_uemu_test.sh`, stage
+  id `03c`).  The harness is **vendored** into this repository (a verbatim copy of
+  Orantree957/uEmu-test at `b8f8500e4830fe525ed089d58040e233a96bdfcc`, which is a private
+  repository, so a submodule pointer could not be fetched by a reviewer) while the µEmu snapshot it
+  builds against stays a submodule (`MCUSec/uEmu`).  Comparing the vendored tree against the
+  upstream commit blob by blob: 968 entries on both sides, 966 identical, and the only two
+  differences are `README.md` and `pipeline.yaml`, whose Chinese documentation was translated to
+  English.  All code, firmware, configs, logs and CSVs are byte-identical; a `.gitattributes` entry
+  (`-text -diff`) keeps the copy from being end-of-line normalised, which otherwise rewrites the
+  reference's CRLF CSVs.
 * What the container reproduces, and where it stops — on two corpus ELFs the harness derives 539-byte
   configs (`rom = 0x08000000,0x20000`, `ram = 0x20000000,0x50000`, `vtor = 0x08000000`) against the
   reference's 544-byte ones, and renders `launch-uEmu.sh` (2,569 B), `uEmu-config.lua` and `library.lua`

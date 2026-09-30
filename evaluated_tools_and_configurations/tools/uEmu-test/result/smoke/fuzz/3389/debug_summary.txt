@@ -1,0 +1,26 @@
+# debug.txt摘要 v2 (pipeline.py 生成)
+debug: s2e-out-0/debug.txt
+lines: 31563
+bytes: 2917386
+SEGFAULT: 0
+KB: 1
+AR: 1
+FK: 0
+DL: 0
+LL: 0
+HANG: 0
+NP: 1
+KF: 0
+INV: 0
+KP: 0
+mode_switch: 1
+kb_last_ln: 31542
+ar_last_ln: 31544
+fk_last_ln: 0
+dl_first_ln: 0
+dl_last_ln: 0
+hang_first_ln: 0
+hang_last_ln: 0
+ms_last_ln: 197
+concrete_mode: 3 [State 0] InvalidStatesDetection: 0 current pc = 0x8000bfa re tb num 30001 concrete mode: 1
+termination: Testing aborted by user via Fuzzer,Engine terminated

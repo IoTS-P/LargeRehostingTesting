@@ -1,0 +1,28 @@
+# debug.txt摘要 v2 (pipeline.py 生成)
+debug: s2e-out-0/debug.txt
+lines: 46467
+bytes: 4409582
+SEGFAULT: 0
+KB: 1
+AR: 0
+FK: 0
+DL: 1
+LL: 1
+HANG: 0
+NP: 0
+KF: 0
+INV: 0
+KP: 0
+mode_switch: 0
+kb_last_ln: 46465
+ar_last_ln: 0
+fk_last_ln: 0
+dl_first_ln: 11016
+dl_last_ln: 11535
+hang_first_ln: 0
+hang_last_ln: 0
+ms_last_ln: 0
+concrete_mode: 9 [State 200] InvalidStatesDetection: 0 current pc = 0x8009094 re tb num 30001 concrete mode: 0
+kill_reason: long loop = 1
+kill_reason: Dead Loop = 1
+termination: Engine terminated

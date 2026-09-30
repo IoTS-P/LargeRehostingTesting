@@ -1,0 +1,26 @@
+# debug.txt摘要 v2 (pipeline.py 生成)
+debug: s2e-out-0/debug.txt
+lines: 901
+bytes: 99277
+SEGFAULT: 0
+KB: 0
+AR: 0
+FK: 1
+DL: 0
+LL: 0
+HANG: 0
+NP: 0
+KF: 3
+INV: 0
+KP: 0
+mode_switch: 0
+kb_last_ln: 0
+ar_last_ln: 0
+fk_last_ln: 775
+dl_first_ln: 0
+dl_last_ln: 0
+hang_first_ln: 0
+hang_last_ln: 0
+ms_last_ln: 0
+kf_line: AFLFuzzer: Kill Fuzz State due to out of bound read, access address = 0x80401f3 pc = 0x801b112
+termination: Testing aborted by user via Fuzzer,Engine terminated

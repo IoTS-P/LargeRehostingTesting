@@ -35,6 +35,3 @@
 [submodule "evaluated_tools_and_configurations/tools/fuzzware"]
 	path = evaluated_tools_and_configurations/tools/fuzzware
 	url = https://github.com/fuzzware-fuzzer/fuzzware
-[submodule "evaluated_tools_and_configurations/tools/uEmu-test"]
-	path = evaluated_tools_and_configurations/tools/uEmu-test
-	url = https://github.com/Orantree957/uEmu-test

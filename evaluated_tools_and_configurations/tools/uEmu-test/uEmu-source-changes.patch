@@ -1,0 +1,122 @@
+uEmu 源码改动 — 共享内存 key 偏移机制
+================================================
+目的: 让多个 uEmu 实例并发运行时使用不同的 System V 共享内存 key，
+      避免相互覆盖（原实现把 key 写死为 7777/8888/9999）。
+
+机制: 两侧都从环境变量 AFL_KEY_OFFSET 读取偏移量，
+      key = BASE + (offset % 1000)。
+        AFL 侧   : AFL_uEmu_KEY(7777) / AFL_BITMAP_KEY(8888) / AFL_TESTCASE_KEY(9999)
+        uEmu 侧  : AFL_IoT_S2E_KEY(7777) / AFL_BITMAP_KEY(8888) / AFL_TESTCASE_KEY(9999)
+      偏移量由运行脚本设置（pipeline.py 用 int(fw) % 1000）。
+
+涉及文件:
+  AFL/afl-fuzz.c
+  s2e/libs2eplugins/src/s2e/Plugins/Fuzzer/AFLFuzzer.h
+  s2e/libs2eplugins/src/s2e/Plugins/Fuzzer/AFLFuzzer.cpp
+
+改动时间: 2026-08-25 09:32 ~ 09:50
+改动来源: Claude Code 会话 822c7801（从对话记录还原）
+
+应用方式（在 uEmu 根目录，即本 patch 路径的上一级之外）:
+  cd /home/czs/uEmu
+  patch -p1 < /path/to/uEmu-source-changes.patch
+  # 或
+  git apply /path/to/uEmu-source-changes.patch
+
+重新编译（改动不重编译不生效）:
+  cd /home/czs/uEmu/AFL && make
+  cd /home/czs/uEmu && make
+
+验证:
+  strings AFL/afl-fuzz | grep AFL_KEY_OFFSET
+  strings build/opt/share/libs2e/libs2e-arm-s2e.so | grep AFL_KEY_OFFSET
+
+================================================
+
+--- a/AFL/afl-fuzz.c
++++ b/AFL/afl-fuzz.c
+@@ -86,12 +86,26 @@
+ #  define EXP_ST static
+ #endif /* ^AFL_LIB */
+ 
+-// uEmu
+-#define AFL_uEmu_KEY 7777
+-#define AFL_BITMAP_KEY 8888
+-#define AFL_TESTCASE_KEY 9999
++// uEmu - 使用环境变量获取key偏移量，避免共享内存冲突
++#define AFL_uEmu_KEY_BASE 7777
++#define AFL_BITMAP_KEY_BASE 8888
++#define AFL_TESTCASE_KEY_BASE 9999
+ #define TESTCASE_SIZE 2048
+ 
++static int AFL_uEmu_KEY;
++static int AFL_BITMAP_KEY;
++static int AFL_TESTCASE_KEY;
++
++static void init_shm_keys() {
++    char *env = getenv("AFL_KEY_OFFSET");
++    int offset = env ? atoi(env) : 0;
++    // 限制偏移量范围，避免溢出
++    offset = offset % 1000;
++    AFL_uEmu_KEY = AFL_uEmu_KEY_BASE + offset;
++    AFL_BITMAP_KEY = AFL_BITMAP_KEY_BASE + offset;
++    AFL_TESTCASE_KEY = AFL_TESTCASE_KEY_BASE + offset;
++}
++
+ struct AFL_data
+ {
+ 	uint8_t AFL_round;
+@@ -7695,6 +7709,9 @@
+   struct timeval tv;
+   struct timezone tz;
+ 
++  // 初始化共享内存key（从环境变量读取偏移量）
++  init_shm_keys();
++
+   SAYF(cCYA "afl-fuzz " cBRI VERSION cRST " by <lcamtuf@google.com>\n");
+ 
+   doc_path = access(DOC_PATH, F_OK) ? "docs" : DOC_PATH;
+--- a/s2e/libs2eplugins/src/s2e/Plugins/Fuzzer/AFLFuzzer.h
++++ b/s2e/libs2eplugins/src/s2e/Plugins/Fuzzer/AFLFuzzer.h
+@@ -32,10 +32,27 @@
+ static uint8_t *bitmap;
+ struct AFL_data *afl_con;
+ static int32_t AFL_shm_id, bitmap_shm_id, testcase_shm_id;
+-#define AFL_IoT_S2E_KEY 7777
+-#define AFL_BITMAP_KEY 8888
+-#define AFL_TESTCASE_KEY 9999
++
++// 使用环境变量获取key偏移量，避免共享内存冲突
++#define AFL_IoT_S2E_KEY_BASE 7777
++#define AFL_BITMAP_KEY_BASE 8888
++#define AFL_TESTCASE_KEY_BASE 9999
+ #define TESTCASE_SIZE 2048
++
++static int AFL_IoT_S2E_KEY;
++static int AFL_BITMAP_KEY;
++static int AFL_TESTCASE_KEY;
++
++static void init_shm_keys() {
++    const char *env = getenv("AFL_KEY_OFFSET");
++    int offset = env ? atoi(env) : 0;
++    // 限制偏移量范围，避免溢出
++    offset = offset % 1000;
++    AFL_IoT_S2E_KEY = AFL_IoT_S2E_KEY_BASE + offset;
++    AFL_BITMAP_KEY = AFL_BITMAP_KEY_BASE + offset;
++    AFL_TESTCASE_KEY = AFL_TESTCASE_KEY_BASE + offset;
++}
++
+ void *afl_shm = NULL;
+ void *bitmap_shm = NULL;
+ void *testcase_shm = NULL;
+--- a/s2e/libs2eplugins/src/s2e/Plugins/Fuzzer/AFLFuzzer.cpp
++++ b/s2e/libs2eplugins/src/s2e/Plugins/Fuzzer/AFLFuzzer.cpp
+@@ -167,6 +167,8 @@
+     PeripheralConnection->onModeSwitch.connect(sigc::mem_fun(*this, &AFLFuzzer::onModeSwitch));
+     PeripheralConnection->onInvalidPHs.connect(sigc::mem_fun(*this, &AFLFuzzer::onInvalidPHs));
+ 
++    // 初始化共享内存key（从环境变量读取偏移量）
++    init_shm_keys();
+     afl_setup();
+     bitmap = (uint8_t *) malloc(MAP_SIZE);
+     afl_start_code = 0;

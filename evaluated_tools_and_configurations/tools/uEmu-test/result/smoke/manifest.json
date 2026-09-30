@@ -1,0 +1,12 @@
+{
+  "batch": "smoke",
+  "seed": "/home/czs/uEmu-test/testcases/seed_alternating.bin",
+  "uEmuDIR": "/home/czs/uEmu",
+  "timeout": {
+    "kb": 1800,
+    "fuzz": 180
+  },
+  "parallel": 3,
+  "firmware_count": 3,
+  "started": "2026-09-28T14:25:54"
+}

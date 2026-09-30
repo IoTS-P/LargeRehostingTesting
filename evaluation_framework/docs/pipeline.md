@@ -161,6 +161,8 @@ Provisioning is `scripts/setup_tools.sh p2im`.
 framework config: `uEmu-test` is a self-contained CLI (`pipeline.py`: cfg → kb → fuzz → analyze →
 coverage) and the reference ran it directly, so the stage is a script that `run_pipeline.sh` invokes
 under the `03c` id, and it writes no database table — its output is CSV under `results/uemu_test/`.
+The harness itself is vendored into this repository rather than referenced as a submodule (upstream
+is private); see the stage's section in `README.md`.
 It works on the same ELFs the P²IM stage's first pass produced, fed in directly with no admission
 premise: µEmu is the paper's second related-work baseline and the step documents that this corpus does
 not run under it.

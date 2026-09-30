@@ -1,0 +1,55 @@
+t0_0x40001524_0x0_0x0_0x0
+t1_0x4000110c_0x1d78e_0xc7690af6090b4b2e_0x0
+t1_0x40008140_0x1d7d2_0xc7690af6090b4b2e_0x0
+pt1_0x40008144_0x1d7e8_0x767e4bc0a118b4f_0xff00
+dt1_0x40000100_0x22444_0x0_0xff
+dt1_0x40000400_0x19540_0x0_0x1010101
+dt1_0x40001110_0x218d8_0x0_0xff
+dt1_0x40002110_0x20db4_0x0_0x0
+dt1_0x40002120_0x20db4_0x0_0x0
+dt1_0x40002124_0x20db4_0x0_0x0
+dt1_0x40002144_0x20db4_0x0_0x0
+dt1_0x50000510_0x18dec_0x0_0x0
+IRQCR
+DefaultDataRegs
+CandidateDataRegs
+fuzzc_0x40002110_0x4_0x2
+fuzzc_0x40002144_0x4_0x2
+fuzzc_0x40002120_0x4_0x1
+fuzzc_0x40002124_0x4_0x1
+fuzzc_0x50000510_0x4_0x1
+
+Statistic:
+T0 num = 1 T1 num = 11 T2 num = 0 T3 num = 0
+ All read peripheral regs num = 12
+CT1 0x40000100
+CT1 0x40000400
+CT1 0x4000110c
+CT1 0x40001110
+CT1 0x40008140
+CT1 0x40008144
+CT1 0x50000510
+CT0 num = 0 CT1 num = 7 CT2 num = 0 CT3 num = 0
+ All conditional read peripheral regs num = 7
+Unique peripheral base address = 0x40000000
+Unique peripheral base address = 0x4000010c
+Unique peripheral base address = 0x40000400
+Unique peripheral base address = 0x40000538
+Unique peripheral base address = 0x40001000
+Unique peripheral base address = 0x4000110c
+Unique peripheral base address = 0x4000150c
+Unique peripheral base address = 0x40002000
+Unique peripheral base address = 0x40002110
+Unique peripheral base address = 0x40002304
+Unique peripheral base address = 0x40002500
+Unique peripheral base address = 0x40008000
+Unique peripheral base address = 0x40008140
+Unique peripheral base address = 0x40008304
+Unique peripheral base address = 0x40008504
+Unique peripheral base address = 0x4000c520
+Unique peripheral base address = 0x4000f518
+Unique peripheral base address = 0x4001f508
+Unique peripheral base address = 0x50000508
+Unique peripheral base address = 0x50000724
+All_search_path_num = 3 All_path_num = 605
+Learning time: 39s

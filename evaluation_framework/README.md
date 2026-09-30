@@ -158,6 +158,12 @@ wraps.
   results in a crash``: KB extraction succeeds (`有KB`, 3.8–9.7 s), then the AFL dry run on the seed
   ends the firmware before fuzzing starts.  That is the same failure mode the P²IM stage produces on
   this corpus, which is the point of running both.
+- vendored, not a submodule: `uEmu-test` is checked into this repository as a verbatim copy of
+  Orantree957/uEmu-test at commit `b8f8500e` — the upstream repository is private, so a submodule
+  pointer could not be fetched by a reviewer — and the µEmu snapshot it builds against stays a
+  submodule (`MCUSec/uEmu`).  966 of the 968 files are byte-identical to upstream; only `README.md`
+  and `pipeline.yaml` differ, because their Chinese documentation was translated to English
+  (the tool's own messages, the CSVs and every source file are untouched).
 - environment: the harness needs Python ≤ 3.11 (`pipeline.py` and µEmu's `uEmu-helper.py` call
   `configparser.SafeConfigParser`, removed in 3.12 — the container's default `python3` is 3.14),
   PyYAML *and* Jinja2 (`uEmu-helper.py` renders the launch templates; its README lists only PyYAML),
