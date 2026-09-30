@@ -139,13 +139,73 @@ the image uses. Three observations worth keeping:
   the driver skips them. `P2IMGateway` / `P2IMRunner` fail to compile against the
   Ghidra 12.0.4 SDK (`Unresolved reference 'definedStrings'`, i.e.
   `ghidra.program.util.DefinedDataIterator.definedStrings` is absent in that
-  release); they belong to the P2IM tool, not to the six evaluated here, so the
-  driver treats them as optional (warning, not failure).
+  release), so the driver treats them as optional (warning, not failure) and the
+  stage installs the JARs that ship in `framework/prebuilt-modules/` instead — the
+  two now run as stage `03b_p2im` (see `docs/pipeline.md`).  That stage is a related-work baseline: it
+  is fed the corpus **directly**, and the outcome it is meant to record is that the dataset does not
+  run on P²IM at all.
+* How the reference ran P²IM — two configurations, both without the admission premise:
+  `config_gen_elf_for_firmxray.json` (`ConvertFirmToELF` only, forked from the analysed-base project,
+  selecting binaries with `base_address IS NOT NULL` and sampling every 45th by size up to 100) and then
+  `config_p2im.json` (`P2IMGateway` → `P2IMRunner`, forked from that `convert_firm_to_elf` project,
+  `WHERE id IN (SELECT id FROM convert_elf_results WHERE elf_path IS NOT NULL)`,
+  `dbImports: convert_elf_results.elf_path`, `p2imRoot: /data/hongyuan/p2im`,
+  `P2IMGateway.projectRoot: p2im_on_real_fw`, `P2IMRunner.pythonPath` pointing at its own conda env
+  `p2im`, `timeoutSeconds: 3600` with a task `timeout: 4000`, writing `p2im_fuzzing_results_v2`).  The
+  artifact runs both halves in one config (`03b_p2im.json`), keeps the module's own table name
+  `p2im_fuzzing_results` instead of that experiment suffix, and points `p2imRoot` at the container's
+  `/data/tools/p2im`.
+* What the reference measured: `p2im_on_real_fw/` holds 2,468 firmware work trees, and its run log
+  (8.25 MB) contains 2,468 `P2IM Runner Finished!` lines — **all of them `Crashes: 0, Hangs: 0`**, after
+  spending the full 3,600 s budget each, with 4–56 basic blocks of coverage.  Every firmware P²IM's QEMU
+  would start (board guessed as `NUCLEO-F103RB`/`STM32F103RB` on the sample inspected) therefore yields
+  nothing on this corpus: that is the evidence the paper cites, not a defect of the harness.  P²IM's
+* The interpreter, which is subtler than it looks.  P2IM's `fuzz.py` imports the standard library
+  only, but at *API* level it needs a Python older than 3.12: it calls `configparser.SafeConfigParser`
+  (removed in 3.12), and its helper `me.py` is reached through its own `#!/usr/bin/env python3` shebang.
+  The reference's `p2im` conda env (Python 3.8.20) satisfied both, and `P2IMRunner` reproduces the
+  effect by deriving the child's `PATH` from `dirname(pythonPath)`.  Pinning `P2IMRunner.pythonPath` to
+  `/usr/bin/python3.8` therefore does *not* work: `python3` on that path is still 3.12, `me.py` dies
+  silently, no `0/peripheral_model.json` is written, the fuzzed QEMU exits while loading the model, and
+  AFL's `Fork server handshake failed` reaches the module as "P2IM aborted early. This usually
+  indicates an unsupported board/MCU configuration." — a message that points nowhere near the cause.
+  The artifact gives 3.8 a bin directory of its own (`~/p2im-py38/bin`, created by
+  `scripts/setup_tools.sh` and by the runtime image) and points `P2IMRunner.pythonPath` at it.
+* The stage is two passes here, as it was on the reference, and for two measured reasons: the ELF pass
+  must run with `threads: 1` (`ConvertFirmToELF` unpacks ELFBuilder to a fixed `/tmp/ELFBuilder`, so
+  concurrent tasks fail with `Text file busy (FileNotFound)`), and the fuzzing pass's `dbImports` are
+  resolved at run start, so `convert_elf_results.elf_path` has to be in the database already (a merged
+  config fails the second task with `Key convert_elf_results.elf_path is missing`).  With the split, the
+  container produces 33 `parsed_elfs`, 33 work trees and 33 `p2im_fuzzing_results` rows on the
+  34-firmware fixture set - 32 `FAILED_EARLY_ABORT`, 1 `SUCCESS_TIMEOUT`, all with 0 crashes and 0 hangs -
+  which is the reference's corpus-wide result (`Crashes: 0, Hangs: 0`) in miniature.  A failed firmware
+  does **not** abort the run: all 33 firmware were attempted after the first failure.
+* Two host facts the reference simply had and a container does not.  Its kernel ran `core_pattern=core`,
+  whereas a container inherits the host's (this host: `|/usr/share/apport/apport -p%p ...`), which makes
+  AFL 2.06b refuse to start — so `docker/docker-compose.yml` and the Dockerfile export AFL's own escape
+  hatch, `AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1` and `AFL_SKIP_CPUFREQ=1`.  And the staged QEMU needs
+  the X11/GL client libraries (`libx11-6`, `libxext6`, `libxrender1`, `libxi6`, `libxkbcommon0`,
+  `libgl1`, `libegl1`, `libpixman-1-0`); the image carries them and `scripts/setup_tools.sh` installs
+  them when it finds a container built without them.
 
 Result of a full run on the build host: **36 `amod-*.jar`** — every module the
 pipeline stages in `pipelines/` reference — against the reference deployment's 40
 (the difference being the P2IM pair, `CortexEmulator`, `EnhancedFunctionFinder` and
-the two example modules).
+the two example modules). With `03b_p2im` the pipeline needs the P2IM pair as well;
+those two come from `framework/prebuilt-modules/`.
+
+### Module JARs that read a file out of themselves
+
+Two modules extract a file from their own JAR at runtime: `ConvertFirmToELF` unpacks the C++
+`ELFBuilder` binary (`ELFBuilder/cmake-build-debug/ELFBuilder`) and `FirmRCA` unpacks
+`generateDataset.py`. The Kotlin rebuild packages classes only, so the JARs it produces for these
+two carry no payload — ConvertFirmToELF comes out at 122 KB against the reference JAR's 1.85 MB — and
+the module then dies inside `extractFileInJar` with
+`ELFBuilder/cmake-build-debug/ELFBuilder not found in modules/amod-ConvertFirmToELF-1.2.jar`, which
+`ProcedureManager` reports as "latter tasks skipped" with no hint about the cause. The install step
+therefore prefers the reference JAR from `framework/prebuilt-modules/` for exactly these two modules
+(an explicit list in `scripts/rebuild_framework.sh`); every other module keeps the rebuilt JAR, which
+is also where the admission patches live.
 
 ### Note on directory names
 

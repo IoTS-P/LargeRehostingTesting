@@ -105,7 +105,8 @@ def main() -> int:
                     help="gradle launcher (the image installs /opt/gradle-8.8/bin/gradle because the wrapper's distribution download is unreliable here)")
     ap.add_argument("--modules", default=None, help="comma separated subset to build")
     ap.add_argument("--optional", default="P2IMGateway,P2IMRunner",
-                    help="modules whose failure is only a warning (not needed by the pipeline stages)")
+                    help="modules whose failure is only a warning: stage 03b runs the reference JARs from "
+                         "framework/prebuilt-modules/ for these anyway (and 12.0.4 cannot compile them)")
     args = ap.parse_args()
 
     project = Path(args.project).resolve()

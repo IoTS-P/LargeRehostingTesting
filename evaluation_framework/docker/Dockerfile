@@ -90,7 +90,12 @@ ARG VERSION
 ENV DEBIAN_FRONTEND=noninteractive JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl unzip openjdk-21-jdk python3 \
+      patchelf \
+      libx11-6 libxext6 libxrender1 libxi6 libxkbcommon0 libgl1 libegl1 libpixman-1-0 \
  && rm -rf /var/lib/apt/lists/*
+# patchelf + the X11/GL client libraries are for stage 3's P²IM step: it runs the GNU ARM Eclipse
+# QEMU from the P²IM snapshot, a 2016-era binary that links against those libraries, and its
+# bundled glibc-family libraries must be kept out of the search path (see setup_tools.sh).
 # Gradle is installed from the release ZIP instead of the wrapper: the wrapper's
 # download of the distribution fails on this network (connection reset from
 # services.gradle.org), while curl retries fine.  Version matches
@@ -153,6 +158,20 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GHIDRA_HOME=/opt/ghidra/ghidra_${GHIDRA_VERSION}_PUBLIC \
     GHIDRA_FIRMLINE_HOME=/opt/ghidra/ghidra_${GHIDRA_FIRMLINE_VERSION}_PUBLIC \
     PATH=/opt/conda/bin:/home/akiba/.cargo/bin:/home/akiba/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# P2IM drives AFL 2.06b, which aborts when /proc/sys/kernel/core_pattern begins with a pipe (the
+# container inherits the host kernel's, e.g. |/usr/share/apport/apport ... — the reference server
+# simply had core_pattern=core).  These are AFL's own documented escape hatches.
+ENV AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
+    AFL_SKIP_CPUFREQ=1
+
+# P2IM's fuzz.py and its me.py helper need configparser.SafeConfigParser (gone in 3.12), and me.py is
+# invoked through `#!/usr/bin/env python3`.  P2IMRunner derives the child's PATH from
+# dirname(pythonPath), so 3.8 gets a bin directory of its own — the shape the reference deployment's
+# p2im conda env provided (3.8.20) — and 03b_p2im.json points P2IMRunner.pythonPath at it.
+RUN mkdir -p /home/akiba/p2im-py38/bin \
+ && ln -sf /usr/bin/python3.8 /home/akiba/p2im-py38/bin/python3 \
+ && ln -sf /usr/bin/python3.8 /home/akiba/p2im-py38/bin/python
 
 # OS packages: JDK21 + postgres + pgbackrest come from the 3.1.2 Dockerfile; the
 # rest are the toolchains the six evaluated tools need (build-base, rust/cargo,

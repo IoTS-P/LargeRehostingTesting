@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Provision the six evaluated tools *inside* the container.
+# Provision the evaluated tools *inside* the container.
 #
 #   scripts/setup_tools.sh                 # everything that is missing
 #   scripts/setup_tools.sh --check         # only report what is provisioned
@@ -20,7 +20,7 @@ if ! in_container; then
   exec docker exec -i "$CONTAINER" bash -lc "bash /opt/rehosting/scripts/setup_tools.sh $*"
 fi
 
-ALL_TOOLS=(firmxray firmline fuzzware hoedur multifuzz firmrca)
+ALL_TOOLS=(firmxray firmline fuzzware hoedur multifuzz firmrca p2im)
 CHECK_ONLY=0
 REQUESTED=()
 for arg in "$@"; do
@@ -201,7 +201,8 @@ provision_hoedur() {
 
   # the patched qemu-sys/build.rs expects the tarball next to the crate and rewrites the
   # built library with patchelf
-  have patchelf || run_logged hoedur sudo apt-get install -y patchelf || return 1
+  # do not assume sudo (the provisioner runs as root in the image): see the note in provision_p2im
+  have patchelf || run_logged hoedur apt-get install -y patchelf || return 1
   if [ ! -f "$root/qemu-sys/qemu-7.1.0.tar.xz" ]; then
     c_blue "    fetching qemu-7.1.0.tar.xz (121 MB)"
     run_logged hoedur curl -fL --retry 3 -o "$root/qemu-sys/qemu-7.1.0.tar.xz" \
@@ -364,6 +365,99 @@ provision_firmrca() {
 # Replacing the installed package directory with a symlink into the checkout gives
 # every one of those relative paths its intended target (and keeps the code live,
 # so patches in the checkout take effect without reinstalling).
+provision_p2im() {
+  local root="$TOOLS_ROOT/p2im"
+  c_blue "==> P²IM (AFL built from the snapshot's sources; QEMU staged from its pre-compiled binary)"
+  [ -d "$root" ] || { c_red "    $root missing"; return 1; }
+  [ "$CHECK_ONLY" = 1 ] && { c_blue "    check: $root/afl/afl-fuzz, $root/qemu/src/qemu.git/gnuarmeclipse-softmmu/qemu-system-gnuarmeclipse, $root/model_instantiation/fuzz.py"; return 0; }
+
+  # 1. AFL: the snapshot ships sources only (afl/afl-fuzz.c), the module runs `afl-fuzz` out of
+  #    the fuzz.cfg it writes, so it has to be compiled once into the bind-mounted tree.
+  if [ ! -x "$root/afl/afl-fuzz" ]; then
+    run_logged p2im make -C "$root/afl" -j"$(nproc)" || { c_red "    AFL build failed"; return 1; }
+  fi
+
+  # 2. QEMU: P²IM expects the binary at qemu/src/qemu.git/gnuarmeclipse-softmmu/, which is a build
+  #    output and therefore absent from the checkout.  The snapshot carries a pre-compiled
+  #    GNU ARM Eclipse QEMU 2.3.50 plus its libraries under qemu/precompiled_bin — but that
+  #    bundle also contains the glibc family of the machine it was built on (librt.so.1,
+  #    libutil.so.1), which the loader here refuses with `GLIBC_PRIVATE not found`.  So expose
+  #    only the non-glibc libraries and bake that directory into the binary's rpath, which keeps
+  #    every other tool in the image untouched.  (fuzz.py always passes -nographic, so no display
+  #    is needed at runtime; the X11/GL client libraries it links against come from the image.)
+  local dst="$root/qemu/src/qemu.git/gnuarmeclipse-softmmu" src="$root/qemu/precompiled_bin"
+  if [ ! -x "$dst/qemu-system-gnuarmeclipse" ]; then
+    mkdir -p "$dst/libs"
+    local f
+    for f in "$src"/*.so*; do
+      [ -e "$f" ] || continue
+      case "$(basename "$f")" in
+        libc.so*|libpthread.so*|librt.so*|libdl.so*|libm.so*|libresolv.so*|libutil.so*) continue ;;
+      esac
+      ln -sfn "$f" "$dst/libs/$(basename "$f")"
+    done
+    cp -f "$src/qemu-system-gnuarmeclipse" "$dst/qemu-system-gnuarmeclipse"
+    if have patchelf; then
+      run_logged p2im patchelf --set-rpath "$dst/libs" "$dst/qemu-system-gnuarmeclipse" || return 1
+    else
+      c_red "    patchelf missing — install it in the image or qemu will not find its libraries"
+    fi
+  fi
+
+  if ! "$dst/qemu-system-gnuarmeclipse" --version >/dev/null 2>&1; then
+    # The image carries these (see the Dockerfile), but a container created from an image built before
+    # that change — or one whose writable layer was replaced by `docker compose up --force-recreate` —
+    # can be missing them, and the failure surfaces far away: P2IMRunner logs "P2IM aborted early. This
+    # usually indicates an unsupported board/MCU configuration" and the stage records no rows at all.
+    # Install them here so provisioning is self-sufficient, and keep the check below.
+    c_blue "    qemu needs its X11/GL client libraries — installing them"
+    # Installing needs root.  Inside the container the akiba user has passwordless sudo; when neither
+    # is available the check below fails with the exact command to run, rather than silently.
+    apt=apt-get
+    if [ "$(id -u)" -ne 0 ]; then
+      if sudo -n true 2>/dev/null; then apt="sudo -n apt-get"; else
+        c_blue "      not root and no passwordless sudo — run as root: apt-get install -y libx11-6 libxext6 libxrender1 libxi6 libxkbcommon0 libgl1 libegl1 libpixman-1-0 && ldconfig"
+      fi
+    fi
+    $apt update -qq && $apt install -y -qq libx11-6 libxext6 libxrender1 libxi6 libxkbcommon0 \
+      libgl1 libegl1 libpixman-1-0 && { [ "$(id -u)" -eq 0 ] && ldconfig || sudo -n ldconfig; } || true
+  fi
+  if ! "$dst/qemu-system-gnuarmeclipse" --version >/dev/null 2>&1; then
+    c_red "    qemu-system-gnuarmeclipse does not start — install libx11-6/libgl1 and retry"
+    return 1
+  fi
+
+  # Two prerequisites that are easy to trip over, and both fail far away from here:
+  #   * P2IM's fuzz.py calls configparser.SafeConfigParser, an alias removed in Python 3.12.  The
+  #     reference ran it in the p2im conda env (Python 3.8.20); 03b_p2im.json therefore pins
+  #     P2IMRunner.pythonPath=/usr/bin/python3.8.
+  #   * AFL 2.06b refuses to start when the kernel's core_pattern begins with a pipe — the container
+  #     sees the host's (apport / systemd-coredump).  docker-compose.yml and the Dockerfile export
+  #     AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 and AFL_SKIP_CPUFREQ=1 to cover it.
+  # P2IMRunner derives the child's PATH from dirname(pythonPath), while P2IM's helper me.py is reached
+  # through its `#!/usr/bin/env python3` shebang and needs configparser.SafeConfigParser (removed in
+  # Python 3.12).  So `python3` on that PATH must be < 3.12: give 3.8 a bin directory of its own — the
+  # same shape the reference deployment used (its p2im conda env, Python 3.8.20) — and point
+  # P2IMRunner.pythonPath at it.  Without this me.py silently fails, no 0/peripheral_model.json is
+  # written, the fuzzed QEMU dies loading the model and AFL reports "Fork server handshake failed".
+  py38="$HOME/p2im-py38/bin"
+  mkdir -p "$py38"
+  ln -sf /usr/bin/python3.8 "$py38/python3"
+  ln -sf /usr/bin/python3.8 "$py38/python"
+  if ! "$py38/python3" -c 'import configparser; configparser.SafeConfigParser' >/dev/null 2>&1; then
+    c_red "    $py38/python3 must be Python < 3.12 (P2IM's fuzz.py/me.py need SafeConfigParser)"
+    return 1
+  fi
+  if [ "${AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES:-}" != "1" ]; then
+    c_red "    AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES is not set in this environment — AFL will abort"
+    return 1
+  fi
+  case "$(cat /proc/sys/kernel/core_pattern 2>/dev/null)" in
+    \|*) c_blue "    note: kernel core_pattern is a pipe — AFL is relying on the environment above" ;;
+  esac
+  c_green "    p2im: ok"
+}
+
 link_venv_package() {
   local venv="$1" root="$2" SP
   SP=$(ls -d "$WORKON_HOME/$venv"/lib/python*/site-packages 2>/dev/null | head -1)
@@ -431,6 +525,7 @@ for tool in "${REQUESTED[@]}"; do
     hoedur)    provision_hoedur    || rc=1 ;;
     multifuzz) provision_multifuzz || rc=1 ;;
     firmrca)   provision_firmrca   || rc=1 ;;
+    p2im)      provision_p2im      || rc=1 ;;
     *) die "unknown tool '$tool' (choose from: ${ALL_TOOLS[*]})" ;;
   esac
 done

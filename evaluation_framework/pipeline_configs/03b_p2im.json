@@ -1,0 +1,65 @@
+{
+  "metadata": {
+    "description": "Stage 3 Security Testing \u2014 P\u00b2IM pass 2 (related work, run directly): feed the corpus to P\u00b2IM with no Stage 2 admission premise, to document that this dataset does not run on P\u00b2IM. P2IMGateway guesses the board/MCU and writes fuzz.cfg under p2im_on_real_fw/<id>/, P2IMRunner drives P\u00b2IM's model instantiation, AFL and the coverage count. Runs after 03b_p2im_elf and forks that pass's project; it imports convert_elf_results.elf_path, so it must not be merged with the ELF pass (dbImports are resolved when the run starts). A firmware P\u00b2IM cannot instantiate ends as FAILED_EARLY_ABORT, which cancels the remainder of the run \u2014 the reference's corpus never took that path, this one does. Table: p2im_fuzzing_results.",
+    "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/03b_p2im.json@/main > /data/results/logs/03b_p2im.log 2>&1 &",
+    "constraint": "WHERE id IN (SELECT id FROM convert_elf_results WHERE elf_path IS NOT NULL)"
+  },
+  "main": {
+    "username": "akiba",
+    "password": "akiba",
+    "usingInstance": "akiba-instance",
+    "general": {
+      "binariesRoot": "/data/akiba/binaries",
+      "importRoot": "/",
+      "processor": "n/a",
+      "autoAnalysisTimeout": 180,
+      "threads": 32
+    },
+    "withGhidraProject": {
+      "projectRoot": "/data/akiba/ghidra_projects",
+      "name": "03b_p2im_elf",
+      "mode": "fork",
+      "forkTo": "03b_p2im",
+      "continueLog": "03b_p2im",
+      "overwriteProject": true,
+      "overwriteLog": true,
+      "saveProject": true,
+      "noCreateProgram": false
+    },
+    "sqlSource": {
+      "serverIP": "127.0.0.1",
+      "serverPort": "31777",
+      "useSnapshot": "current",
+      "constraint": "WHERE id IN (SELECT id FROM convert_elf_results WHERE elf_path IS NOT NULL)",
+      "disableUpdate": false
+    },
+    "dbImports": [
+      "convert_elf_results.elf_path"
+    ],
+    "tasks": [
+      {
+        "mainClassName": "org.iotsplab.akiba.process.P2IMGateway",
+        "configKey": "@@/P2IMGateway",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      },
+      {
+        "mainClassName": "org.iotsplab.akiba.process.P2IMRunner",
+        "configKey": "@@/P2IMRunner",
+        "tableName": "p2im_fuzzing_results",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug",
+        "timeout": 4000
+      }
+    ]
+  },
+  "P2IMGateway": {
+    "p2imRoot": "/data/tools/p2im",
+    "objdumpPath": "/usr/bin/arm-none-eabi-objdump",
+    "projectRoot": "p2im_on_real_fw"
+  },
+  "P2IMRunner": {
+    "timeoutSeconds": 3600,
+    "pythonPath": "/home/akiba/p2im-py38/bin/python3"
+  }
+}

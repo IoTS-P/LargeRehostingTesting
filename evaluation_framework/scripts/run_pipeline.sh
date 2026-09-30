@@ -26,6 +26,8 @@ STAGES=(
   "01|01_firmxray.json|Stage 1 Reconnaissance — FirmXRay base-address recognition"
   "02b|02b_admission.json|Stage 2 Emulation — seed admission (fuzzware/hoedur/multifuzz)"
   "03|03_fuzzware.json|Stage 3 Security Testing — Fuzzware fuzzing, crash replay, statistics"
+  "03b|03b_p2im_elf.json|Stage 3 Security Testing — P²IM pass 1 (related work): rebuild the ELF (threads: 1)"
+  "03b|03b_p2im.json|Stage 3 Security Testing — P²IM pass 2 (related work): corpus run directly, expected not to emulate"
   "04|04_hoedur.json|Stage 3 Security Testing — Hoedur fuzzing + statistics"
   "05|05_multifuzz.json|Stage 3 Security Testing — MultiFuzz fuzzing + replay"
   "06|06_firmrca.json|Stage 4 Diagnosis — FirmRCA root-cause analysis (classify pass 1)"
@@ -91,6 +93,7 @@ targets = {
                                                   secs % 3600 // 60, secs % 60)),
     "04_hoedur.json":   ("HoedurFuzz", "maxTimeoutMinutes", f"{max(1, secs // 60)}m"),
     "05_multifuzz.json": ("MultiFuzz", "runFor", f"{secs}s"),
+    "03b_p2im.json":   ("P2IMRunner", "timeoutSeconds", secs),
 }
 for name, (task, field, value) in targets.items():
     cfg = json.loads((src / name).read_text())

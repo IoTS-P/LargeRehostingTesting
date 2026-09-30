@@ -16,7 +16,12 @@ MODULES_ONLY=0
 
 if ! in_container; then
   require_container
-  exec docker exec -i "$CONTAINER" bash -lc "bash /opt/rehosting/scripts/rebuild_framework.sh ${MODULES_ONLY:+--modules-only}"
+  # NOTE: `${MODULES_ONLY:+...}` expands whenever the variable is merely *set*, and MODULES_ONLY=0
+  # is set — so the previous form re-ran this script with --modules-only every time, i.e. a plain
+  # `rebuild_framework.sh` silently rebuilt the modules and never the framework.
+  extra=""
+  [ "$MODULES_ONLY" = 1 ] && extra="--modules-only"
+  exec docker exec -i "$CONTAINER" bash -lc "bash /opt/rehosting/scripts/rebuild_framework.sh $extra"
 fi
 
 SRC=/opt/rehosting/framework
@@ -69,6 +74,21 @@ install_modules() {
   # AkibaUtils is built in its own subproject (akiba_mod_utils) and the framework expects it
   # next to the analysis modules, so it has to be copied explicitly.
   cp "$BUILD"/subprojects/akiba_mod_utils/build/libs/amod-*.jar /home/akiba/akiba_framework/modules/ 2>/dev/null || true
+  # Two modules read a file out of their own JAR at runtime — ConvertFirmToELF unpacks the C++
+  # ELFBuilder binary, FirmRCA unpacks generateDataset.py — and this Kotlin build packages classes
+  # only, so the JARs it produces for those two carry no payload.  The module then dies inside
+  # extractFileInJar, which ProcedureManager reports only as "latter tasks skipped", with nothing in
+  # the stage log pointing at the JAR.  So the reference JARs that ship with the artifact win for
+  # exactly these two modules; every other module keeps the rebuilt JAR (which is where the
+  # admission patches live).  See docs/provenance.md.
+  for m in amod-ConvertFirmToELF-1.2.jar amod-FirmRCA-1.0.jar; do
+    ref="/opt/rehosting/framework/prebuilt-modules/$m"
+    if [ -f "$ref" ]; then
+      cp -f "$ref" /home/akiba/akiba_framework/modules/ && c_blue "    $m: reference JAR kept (it carries a payload the rebuild drops)"
+    else
+      c_red "    $m: reference JAR missing at $ref"
+    fi
+  done
   c_green "modules updated: $(ls /home/akiba/akiba_framework/modules | wc -l) jar(s)"
 }
 
@@ -82,7 +102,17 @@ if [ "$MODULES_ONLY" = 0 ]; then
     zip="$BUILD/subprojects/$proj/build/distributions/$proj-$VERSION.zip"
     [ -f "$zip" ] || { c_red "missing $zip"; continue; }
     rm -rf "/tmp/$proj-dist"; unzip -q "$zip" -d /tmp
-    rm -rf "/home/akiba/$proj"; mv "/tmp/$proj-$VERSION" "/home/akiba/$proj"
+    rm -rf "/home/akiba/$proj"
+    # If that rm could not remove the tree — e.g. a root-owned directory was left inside it — the mv
+    # below nests the distribution *inside* the old directory instead of replacing it, and
+    # /home/akiba/<proj> ends up with no bin/ and no lib/.  lib.sh reads exactly those two paths to
+    # decide whether it is inside the container, so the symptom is a stage that refuses to start with
+    # "docker: command not found".  Fail loudly instead of producing that state.
+    if [ -e "/home/akiba/$proj" ]; then
+      c_red "cannot replace /home/akiba/$proj (something inside it is not removable by $(id -un)); fix the ownership and re-run"
+      exit 1
+    fi
+    mv "/tmp/$proj-$VERSION" "/home/akiba/$proj"
     cp /opt/ghidra-jar/ghidra.jar "/home/akiba/$proj/lib/ghidra.jar"
     cp "$BUILD/dockerfile_needed/entrypoint.sh" "/home/akiba/$proj/" 2>/dev/null || true
     c_green "$name reinstalled from $zip"

@@ -15,6 +15,7 @@
 #   evaluated_tools_and_configurations/tools/hoedur            ->      /data/tools/hoedur
 #   evaluated_tools_and_configurations/tools/MultiFuzz         ->      /data/tools/MultiFuzz
 #   evaluated_tools_and_configurations/tools/FirmRCA           ->      /data/tools/FirmRCA
+#   evaluated_tools_and_configurations/tools/p2im             ->      /data/tools/p2im  (stage 3b: ConvertFirmToELF -> P2IMGateway -> P2IMRunner; related work, run directly on the corpus)
 #   evaluation_samples/     ->      /data/samples        (firmware sample set)
 #   evaluation_results/    ->      /data/results        (exported results)
 #   evaluation_framework/framework/ -> /opt/rehosting/framework (rebuilds only)
@@ -29,6 +30,12 @@ services:
   akiba:
     container_name: largerehosting_akiba
     image: akiba_allinone:${VERSION:-3.1.2}
+    environment:
+      # P2IM runs AFL 2.06b, which refuses to start when the kernel's core_pattern begins with
+      # a pipe (the container sees the host's, e.g. apport or systemd-coredump).  The upstream
+      # escape hatch is these two variables; the reference server happened to have core_pattern=core.
+      AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
+      AFL_SKIP_CPUFREQ: "1"
     build:
       context: ../..
       dockerfile: evaluation_framework/docker/Dockerfile
@@ -58,6 +65,7 @@ services:
       - "../../evaluated_tools_and_configurations/tools/hoedur:/data/tools/hoedur"
       - "../../evaluated_tools_and_configurations/tools/MultiFuzz:/data/tools/MultiFuzz"
       - "../../evaluated_tools_and_configurations/tools/FirmRCA:/data/tools/FirmRCA"
+      - "../../evaluated_tools_and_configurations/tools/p2im:/data/tools/p2im"
       - "../../evaluation_samples:/data/samples"
       - "../../evaluation_results:/data/results"
       - "../../evaluation_framework/pipeline_configs:/data/pipelines:ro"

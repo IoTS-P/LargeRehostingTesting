@@ -236,8 +236,16 @@ abstract class AkibaModule (
         // cancel() cancel the *caller*, and the wrapper cancels the monitor when the
         // module finishes — which kills the remaining tasks of the binary (the caller's
         // coroutine swallows it as JobCancellationException in ProcedureManager).
+        // A module annotated @IgnoreRuntimeTimeout gets no timeout monitor at all: the branch below
+        // builds a TaskMonitorAdapter(true), which reports isCancelled() = true from the start.  That
+        // adapter is a placeholder, not a verdict, so remember whether a real timeout was armed and
+        // consult it below — otherwise every cancel-sensitive module without a timeout (the P2IM pair
+        // and ConvertFirmToELF are annotated @IgnoreRuntimeTimeout, ConvertFirmToELF is also
+        // @FailOnCancelled) is reported as failed right after succeeding, and ProcedureManager skips
+        // the remaining tasks of that binary.
+        val timeoutArmed = this.javaClass.annotations.none { it is IgnoreRuntimeTimeout } && timeout > 0
         taskGlobalMonitor =
-            if (this.javaClass.annotations.none { it is IgnoreRuntimeTimeout } && timeout > 0)
+            if (timeoutArmed)
                 TimeoutTaskMonitor.timeoutIn(timeout.toLong(), TimeUnit.SECONDS)
                     .asCoroutineAware(job)
             else
@@ -275,7 +283,7 @@ abstract class AkibaModule (
 
         logger.debug("execution time: $executionTime ms")
 
-        if (taskGlobalMonitor.isCancelled) {        // Timeout occurred
+        if (taskGlobalMonitor.isCancelled && timeoutArmed) {        // Timeout occurred
             if (this.javaClass.annotations.any { it is FailOnCancelled })
                 failureSign = FAILED
         } else {

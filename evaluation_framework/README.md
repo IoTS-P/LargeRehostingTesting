@@ -11,7 +11,7 @@ evaluation_framework/
 ├── docs/                pipeline.md (stage-by-stage, thresholds), provenance.md (pinned commits)
 ├── framework/           Akiba 3.1.2 sources (subprojects/), prebuilt module JARs, Gradle files
 ├── pipeline_configs/    one JSON run config per stage: 00_import, 00b_analyze, 01_firmxray,
-│                        02_firmline, 02b_admission, 03_fuzzware, 04_hoedur, 05_multifuzz,
+│                        02_firmline, 02b_admission, 03_fuzzware, 03b_p2im, 04_hoedur, 05_multifuzz,
 │                        06_firmrca, 06b_firmrca_classify, smoke_test
 └── scripts/             the drivers (below)
 ```
@@ -86,6 +86,55 @@ wraps.
   `firmxray_on_fuzzware_stat_results`, and the view `firmxray_fuzzware_replay_crashes` ·
   log: `logs/03_03_fuzzware.log`
 - per-firmware work tree: `/data/akiba/binaries/fuzzware_projects/<id>/`
+
+### `03b_p2im` — P²IM fuzzing (Stage 3 Security Testing)
+
+- modules: `ConvertFirmToELF` (rebuilds the firmware as an ELF under `/data/akiba/binaries/parsed_elfs/`
+  from `firmxray_results.base_address`; table `convert_elf_results`), `P2IMGateway` (guesses the board
+  and MCU from strings in the binary — STM32F429I-Discovery, Arduino-Due, FRDM-K64F, else
+  NUCLEO-F103RB — and writes `fuzz.cfg` under `p2im_on_real_fw/<id>/`), `P2IMRunner` (runs
+  `model_instantiation/fuzz.py`: peripheral-model instantiation with P²IM's own QEMU, then AFL
+  fuzzing, then a basic-block coverage count)
+- writes: `p2im_fuzzing_results` (`mcu_used`, `crashes_found`, `hangs_found`, `bbl_coverage`,
+  `execution_status`) · log: `logs/03b_03b_p2im.log`
+- selection: the corpus **directly** — `WHERE id IN (SELECT id FROM firmxray_results WHERE
+  base_address IS NOT NULL)`, the reference's own predicate: P²IM is the paper's related-work baseline,
+  so this step deliberately has **no Stage 2 admission premise**, and it asks only that there be a base
+  address to rebuild the ELF from.  The per-firmware budget is `P2IMRunner.timeoutSeconds` (the task
+  timeout sits above it, as on the reference, so the budget is what ends the run)
+- expected outcome: the corpus does not run on P²IM, and the step exists to record that.  On the
+  reference, all 2,468 eligible firmware (every image FirmXRay gives a base address) spent the full
+  one-hour budget and reported `Crashes: 0, Hangs: 0` with only 4-56 basic blocks - that record, not
+  crashes, is what the paper cites.  The same two shapes appear here and both land a row: a firmware
+  whose seeds P²IM's model accepts runs its budget (`Timeout reached (Normal behavior for fuzzing)` ->
+  `execution_status = SUCCESS_TIMEOUT`), while one it cannot instantiate ends on AFL's own
+  `PROGRAM ABORT` (`All test cases time out` / `Test case ... results in a crash`) ->
+  `FAILED_EARLY_ABORT`.  On the container's 34-firmware fixture set that yields 33 rows (per-firmware
+  budget 60 s here, 3600 as shipped): 32 `FAILED_EARLY_ABORT` and 1 `SUCCESS_TIMEOUT`, every one of them
+  with `crashes_found = 0, hangs_found = 0` and 0-185 basic blocks - the corpus-wide zero in miniature,
+  and the numbers the paper reports at corpus scale.  A firmware that suddenly yields crashes under P²IM
+  is the surprising case, not the goal.
+- two passes, not one: `03b_p2im_elf.json` (`ConvertFirmToELF` only, `threads: 1`) and then
+  `03b_p2im.json` (`P2IMGateway` -> `P2IMRunner`, forked from the first pass's Ghidra project).  The
+  split is a requirement, not a style choice: `ConvertFirmToELF` unpacks its ELFBuilder helper to a
+  fixed `/tmp/ELFBuilder`, so concurrent tasks collide on it (`Text file busy`) - the reference ran its
+  ELF pass with `threads: 1` for the same reason - and the fuzzing pass's `dbImports`
+  (`convert_elf_results.elf_path`) are resolved when a run starts, so those rows must already exist.
+  Both passes share the `03b` stage id, so `--only 03b` runs them in order.
+- environment: P²IM's `fuzz.py`/`me.py` need Python < 3.12 (`configparser.SafeConfigParser`, removed in
+  3.12), and `me.py` is entered through `#!/usr/bin/env python3` while `P2IMRunner` builds the child's
+  `PATH` from `dirname(pythonPath)` — so pinning `/usr/bin/python3.8` is not enough: `python3` on that
+  path still resolves to 3.12, `me.py` dies before writing `0/peripheral_model.json`, the fuzzed QEMU
+  exits loading the model and AFL reports `Fork server handshake failed`.  `P2IMRunner.pythonPath`
+  therefore points at `~/p2im-py38/bin/python3`, the artifact's equivalent of the reference's `p2im`
+  conda env.  AFL additionally needs `AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1` / `AFL_SKIP_CPUFREQ=1`
+  when the kernel's `core_pattern` is a pipe.
+- provisioning: `scripts/setup_tools.sh p2im` compiles AFL from the snapshot's sources and stages the
+  snapshot's pre-compiled GNU ARM Eclipse QEMU at the path `fuzz.cfg` expects, exposing only its
+  non-glibc libraries (`qemu/src/qemu.git/gnuarmeclipse-softmmu/libs` + `patchelf --set-rpath`); the
+  X11/GL client libraries that QEMU links against come from the image, and `setup_tools.sh` installs
+  them itself (via sudo/root) when a container was created without them, as it also creates
+  `~/p2im-py38/bin` and verifies the interpreter and the AFL environment
 
 ### `04_hoedur` — Hoedur fuzzing (Stage 3)
 

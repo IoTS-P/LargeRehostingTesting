@@ -7,7 +7,7 @@ vocabulary, and each configuration below is labelled with the stage it serves:
 |---|---|---|
 | **Stage 1 — Reconnaissance** | `00b_analyze`, `01_firmxray`, `02_firmline` | recover what is needed to start an emulation: Ghidra pre-analysis (functions, strings), the base address and entry validity (FirmXRay), and a generic firmware analysis (Firmline) |
 | **Stage 2 — Emulation** | `02b_admission` (plus the `FuzzwareGateway` task inside `03`–`05`) | turn the recovered base address into an emulation configuration and decide whether the fuzzer admits the firmware at all |
-| **Stage 3 — Security Testing** | the fuzzing tasks of `03_fuzzware` (FirmXRayOnFuzzware), `04_hoedur`, `05_multifuzz` (+ crash replay and statistics) | fuzz each firmware, replay the crashes, collect coverage |
+| **Stage 3 — Security Testing** | the fuzzing tasks of `03_fuzzware` (FirmXRayOnFuzzware), `03b_p2im` (ConvertFirmToELF → P2IMGateway → P2IMRunner; P²IM as the related-work baseline, run directly), `04_hoedur`, `05_multifuzz` (+ crash replay and statistics) | fuzz each firmware, replay the crashes, collect coverage |
 | **Stage 4 — Diagnosis** | `06_firmrca`, `06b_firmrca_classify` | root-cause analysis of the crash inputs and the classification pass |
 
 `00_import` is not a stage — it puts the firmware into the database before Stage 1 starts, and
@@ -52,7 +52,8 @@ per-seed `[ADMISSION]` lines the fuzzer printed. This is the stage that decides 
 many samples of a corpus are fuzzable at all, so run it before the fuzzing stages.
 Admission is the gate of the fuzzing stages, as on the reference server: 02b requires
 FirmXRay's `entry_valid = 'valid'`, and `03_fuzzware.json`, `04_hoedur.json` and
-`05_multifuzz.json` require the verdict of their own admission table:
+`05_multifuzz.json` require the verdict of their own admission table. `03b_p2im.json` is the exception:
+P²IM is the paper's related-work baseline and is fed the corpus **directly**, with no admission premise:
 
 ```sql
 WHERE id IN (SELECT id FROM fuzzware_admission_checks_v2  WHERE result = 'PASSED')
@@ -100,6 +101,59 @@ virtualenv - the DMA-capable build the reference server fuzzes with (`venv:
   (`crash_replay_results` JSONB: pc, lr, coverage) and the view
   `firmxray_fuzzware_replay_crashes`;
 * `FuzzwareStat` — coverage statistics → `firmxray_on_fuzzware_stat_results`.
+
+## Stage 03b — P²IM (Stage 3 Security Testing)
+
+`03b_p2im.json` runs the P²IM step of Stage 3. It is the only stage that needs an ELF, so it chains
+three modules per firmware: `ConvertFirmToELF` (rebuilds the firmware as an ELF in
+`/data/akiba/binaries/parsed_elfs/<id>.elf`, using `firmxray_results.base_address` as the load
+address; table `convert_elf_results`), `P2IMGateway` (guesses board/MCU and writes the `fuzz.cfg`
+P²IM's scripts read, table-less by design) and `P2IMRunner` (`fuzz.py`, i.e. peripheral-model
+instantiation with P²IM's own QEMU, AFL fuzzing, then a coverage count; table
+`p2im_fuzzing_results`).
+
+```sql
+WHERE id IN (SELECT id FROM firmxray_results WHERE base_address IS NOT NULL)
+```
+
+P²IM is the paper's **related-work baseline**, and this step exists to document that the dataset does
+not run on it: it is fed the corpus directly (no admission premise, no per-firmware eligibility
+verdict), because restricting it to firmware that already emulates under fuzzware would defeat the
+comparison. The predicate is the reference's own — it only asks that there be a base address to rebuild
+the ELF from.
+
+On the reference, all 2,468 eligible firmware (every image FirmXRay gives a base address) spent the full
+one-hour budget and reported `Crashes: 0, Hangs: 0` with only 4-56 basic blocks - that record, not
+crashes, is what the paper cites; a firmware that suddenly emulates under P2IM would be the surprising
+Both shapes appear here and both land a row: a firmware whose seeds P2IM's model accepts runs its
+budget (`Timeout reached (Normal behavior for fuzzing)` -> `execution_status = SUCCESS_TIMEOUT`), while
+one it cannot instantiate ends on AFL's own `PROGRAM ABORT` (`All test cases time out` / `Test case ...
+results in a crash`) -> `FAILED_EARLY_ABORT`.  On the container's 34-firmware fixture set (60 s budget
+for the verification runs, 3600 as shipped) that is 33 rows: 32 `FAILED_EARLY_ABORT` and 1
+`SUCCESS_TIMEOUT`, every one with `crashes_found = 0, hangs_found = 0` and 0-185 basic blocks.
+(ConvertFirmToELF only, sampled `rn % 45 = 0 LIMIT 100`) and then `config_p2im.json` (P2IMGateway ->
+P2IMRunner over `convert_elf_results WHERE elf_path IS NOT NULL`, which is where the 2,468 came from);
+this artifact runs both in one config, and keeps the module's own table name `p2im_fuzzing_results`
+rather than the reference's experiment suffix.
+
+The per-firmware budget is `P2IMRunner.timeoutSeconds` (default 3600, also settable with `--fuzz-time`).
+
+Three environment facts make the difference between "P2IM runs and reports nothing" and an indirect
+failure that surfaces as an unsupported board/MCU.  `scripts/setup_tools.sh`, `docker/docker-compose.yml`
+and the runtime image handle all three:
+
+* **Interpreter.** `fuzz.py` and its helper `me.py` need Python < 3.12 (`configparser.SafeConfigParser`),
+  and `me.py` runs through `#!/usr/bin/env python3` while `P2IMRunner` derives the child's `PATH` from
+  `dirname(pythonPath)`.  `P2IMRunner.pythonPath` therefore points at `~/p2im-py38/bin/python3`, the
+  artifact's equivalent of the reference's `p2im` conda env (3.8.20); pinning `/usr/bin/python3.8` is not
+  enough, because `python3` then resolves to 3.12 and `me.py` dies before writing
+  `0/peripheral_model.json`.
+* **AFL and `core_pattern`.** AFL 2.06b aborts when the kernel's `core_pattern` begins with a pipe (a
+  container inherits the host's, e.g. apport), so the compose file and the image export
+  `AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1` and `AFL_SKIP_CPUFREQ=1`.
+* **QEMU's client libraries.** The staged QEMU needs `libx11-6` and its X11/GL siblings; the image
+  carries them and the provisioner installs them when a container was created without them.
+Provisioning is `scripts/setup_tools.sh p2im`.
 
 ## Stage 04 — Hoedur (Stage 3 Security Testing)
 
