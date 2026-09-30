@@ -1,0 +1,15 @@
+# 备份（2.9G 一次性归档，不入库）
+backup/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# 编辑器 / 工具
+.claude/
+.vscode/
+.idea/
+
+# 运行时的中间文件
+*.tmp
+core

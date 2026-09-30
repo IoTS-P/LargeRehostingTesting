@@ -1,0 +1,61 @@
+t0_0x400f3000_0x0_0x0_0x0
+t0_0x400f3004_0x0_0x0_0x0
+dt1_0x43e4001c_0xfd0_0x0_0x0
+dt1_0x43e60084_0x32a_0x0_0x0
+dt1_0x43e60084_0x374_0x0_0x0
+dt1_0x43e60084_0x101e_0x0_0x0
+dt1_0x43e60084_0x1056_0x0_0x0
+IRQCR
+DefaultDataRegs
+CandidateDataRegs
+fuzzc_0x43e60084_0x4_0x4
+fuzzc_0x43e4001c_0x4_0x1
+
+Statistic:
+T0 num = 2 T1 num = 2 T2 num = 0 T3 num = 0
+ All read peripheral regs num = 4
+CT0 0x400f3004
+CT1 0x43e4001c
+CT1 0x43e60084
+CT0 num = 1 CT1 num = 2 CT2 num = 0 CT3 num = 0
+ All conditional read peripheral regs num = 3
+Unique peripheral base address = 0x40000008
+Unique peripheral base address = 0x40000104
+Unique peripheral base address = 0x40001008
+Unique peripheral base address = 0x40001104
+Unique peripheral base address = 0x40050000
+Unique peripheral base address = 0x400c0000
+Unique peripheral base address = 0x400c0104
+Unique peripheral base address = 0x400c0204
+Unique peripheral base address = 0x400c0304
+Unique peripheral base address = 0x400c0404
+Unique peripheral base address = 0x400c0504
+Unique peripheral base address = 0x400c0604
+Unique peripheral base address = 0x400c0704
+Unique peripheral base address = 0x400c0804
+Unique peripheral base address = 0x400c0904
+Unique peripheral base address = 0x400c0a04
+Unique peripheral base address = 0x400c4000
+Unique peripheral base address = 0x400c4104
+Unique peripheral base address = 0x400c4204
+Unique peripheral base address = 0x400c4304
+Unique peripheral base address = 0x400c4404
+Unique peripheral base address = 0x400c4504
+Unique peripheral base address = 0x400c4604
+Unique peripheral base address = 0x400c4704
+Unique peripheral base address = 0x400c4804
+Unique peripheral base address = 0x400c4904
+Unique peripheral base address = 0x400e0004
+Unique peripheral base address = 0x400e1000
+Unique peripheral base address = 0x400e1108
+Unique peripheral base address = 0x400f2000
+Unique peripheral base address = 0x400f3000
+Unique peripheral base address = 0x42a00080
+Unique peripheral base address = 0x43812010
+Unique peripheral base address = 0x43812710
+Unique peripheral base address = 0x43c0001c
+Unique peripheral base address = 0x43e4001c
+Unique peripheral base address = 0x43e60030
+Unique peripheral base address = 0x43e60180
+All_search_path_num = 1 All_path_num = 7
+Learning time: 23s

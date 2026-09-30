@@ -1,0 +1,4 @@
+fw,result,details,duration_min,end_type,queue
+3,提前退出,fuzzer:dry-run种子crash,0.3,early,1
+3389,提前退出,fuzzer:dry-run种子crash,0.2,early,1
+12255,提前退出,fuzzer:dry-run种子crash,0.2,early,1

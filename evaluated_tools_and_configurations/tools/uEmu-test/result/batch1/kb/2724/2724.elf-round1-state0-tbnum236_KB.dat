@@ -1,0 +1,22 @@
+dt1_0x4000b504_0x2765a_0x0_0x0
+dt1_0x4000b504_0x27726_0x0_0x0
+dt1_0x4000b504_0x27f5a_0x0_0x0
+dt1_0x4000b504_0x27f72_0x0_0x0
+dt1_0x4001e400_0x404a6_0x0_0xff00
+IRQCR
+DefaultDataRegs
+CandidateDataRegs
+fuzzc_0x4000b504_0x4_0x4
+
+Statistic:
+T0 num = 0 T1 num = 2 T2 num = 0 T3 num = 0
+ All read peripheral regs num = 2
+CT1 0x4000b504
+CT1 0x4001e400
+CT0 num = 0 CT1 num = 2 CT2 num = 0 CT3 num = 0
+ All conditional read peripheral regs num = 2
+Unique peripheral base address = 0x4000b504
+Unique peripheral base address = 0x4001e400
+Unique peripheral base address = 0x4001e504
+All_search_path_num = 1 All_path_num = 6
+Learning time: 10s

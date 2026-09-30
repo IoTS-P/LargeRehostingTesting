@@ -1,0 +1,27 @@
+# debug.txt摘要 v2 (pipeline.py 生成)
+debug: s2e-out-0/debug.txt
+lines: 34174
+bytes: 3146246
+SEGFAULT: 0
+KB: 1
+AR: 0
+FK: 0
+DL: 3
+LL: 0
+HANG: 0
+NP: 0
+KF: 0
+INV: 0
+KP: 0
+mode_switch: 0
+kb_last_ln: 34172
+ar_last_ln: 0
+fk_last_ln: 0
+dl_first_ln: 2096
+dl_last_ln: 2504
+hang_first_ln: 0
+hang_last_ln: 0
+ms_last_ln: 0
+concrete_mode: 3 [State 7] InvalidStatesDetection: 0 current pc = 0x8000bfa re tb num 30001 concrete mode: 1
+kill_reason: Dead Loop = 3
+termination: Engine terminated

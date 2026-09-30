@@ -1,0 +1,20 @@
+dt1_0x40010400_0x29b70_0x0_0xff
+IRQCR
+DefaultDataRegs
+CandidateDataRegs
+
+Statistic:
+T0 num = 0 T1 num = 1 T2 num = 0 T3 num = 0
+ All read peripheral regs num = 1
+CT1 0x40010400
+CT0 num = 0 CT1 num = 1 CT2 num = 0 CT3 num = 0
+ All conditional read peripheral regs num = 1
+Unique peripheral base address = 0x40000518
+Unique peripheral base address = 0x40010400
+Unique peripheral base address = 0x40011000
+Unique peripheral base address = 0x40011304
+Unique peripheral base address = 0x40011508
+Unique peripheral base address = 0x50000508
+Unique peripheral base address = 0x50000728
+All_search_path_num = 1 All_path_num = 2
+Learning time: 12s

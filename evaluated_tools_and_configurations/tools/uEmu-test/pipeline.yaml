@@ -1,0 +1,31 @@
+# uEmu firmware fuzzing pipeline configuration
+#
+# The path to uEmu itself comes from an environment variable:
+#     export uEmuDIR=/home/czs/uEmu
+# If it is not set, startup fails immediately with an error.
+
+paths:
+  firmware: firmware      # firmware/<batch>/<fw>/{<fw>.elf, <fw>.cfg}
+  result:   result        # result/<batch>/  all results of that batch
+  seeds:    testcases     # directory holding the seed files
+
+timeout:
+  kb:   1800              # upper bound for the KB extraction stage (seconds)
+  fuzz: 3600              # upper bound for the fuzz stage (seconds)
+
+parallel:
+  config: 8               # configuration-generation concurrency (the helper writes to its own temp dir, no locks)
+  kb:     8
+  fuzz:   10
+
+# fuzz-stage startup parameters (kept identical to the old fuzz.py)
+fuzz:
+  afl_startup_wait: 10    # how long to wait after starting AFL before starting uEmu
+  uemu_stop_wait:   30    # how long to wait for uEmu to exit on its own after AFL stops; killed if it exceeds this
+
+# AFL executable (the template holds a bare command; it is rewritten to an absolute path after generation)
+# NOTE: the artifact's runner rewrites this to $uEmuDIR/AFL/afl-fuzz for its own runs.
+afl_bin: /home/czs/uEmu/AFL/afl-fuzz
+
+# KB file matching pattern (looked up under kb/<fw>/)
+kb_glob: "*_KB.dat"

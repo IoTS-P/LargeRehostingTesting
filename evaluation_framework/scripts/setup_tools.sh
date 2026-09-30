@@ -514,8 +514,9 @@ link_tool_clis() {
   [ "$linked" -gt 0 ] && c_green "    linked $linked CLI(s) from the venvs into /usr/local/bin"
 }
 
-# µEmu: the artifact ships two trees - the uEmu-test harness (Orantree957/uEmu-test) and the µEmu
-# snapshot it drives (MCUSec/uEmu, pinned like every other tool).  Running a firmware needs µEmu
+# µEmu: the artifact ships two trees - the uEmu-test harness (Orantree957/uEmu-test, vendored into
+# this repository because upstream is private) and the µEmu snapshot it drives (MCUSec/uEmu, a
+# submodule like every other tool here).  Running a firmware needs µEmu
 # built with S2E: libs2e.so, the mps2-ans2e QEMU build under $uEmuDIR/build, the patched
 # AFL/afl-fuzz, and KVM for the guest.  None of that can be shipped here, so this prepares what the
 # cfg step needs (the harness, PyYAML) and applies the harness's source changes to the snapshot so a

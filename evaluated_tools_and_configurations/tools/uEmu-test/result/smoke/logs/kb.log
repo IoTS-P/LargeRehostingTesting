@@ -1,0 +1,28 @@
+[2026-09-28 14:24:10] kb 阶段: 3 个固件, 并发 3, 超时 120s
+[2026-09-28 14:24:10] [kb][配置失败] 3389: '/home/czs/uEmu-test/result/smoke/kb/3389/launch-uEmu.sh' and '/home/czs/uEmu-test/result/smoke/kb/3389/launch-uEmu.sh' are the same file
+[2026-09-28 14:24:10] [kb][配置失败] 3: '/home/czs/uEmu-test/result/smoke/kb/3/launch-uEmu.sh' and '/home/czs/uEmu-test/result/smoke/kb/3/launch-uEmu.sh' are the same file
+[2026-09-28 14:24:10] [kb][配置失败] 12255: '/home/czs/uEmu-test/result/smoke/kb/12255/launch-uEmu.sh' and '/home/czs/uEmu-test/result/smoke/kb/12255/launch-uEmu.sh' are the same file
+[2026-09-28 14:24:10]   kb 进度 3/3
+[2026-09-28 14:24:10] kb 完成: 有KB 0/3 → result/smoke/kb_status.csv
+[2026-09-28 14:24:21] kb 阶段: 3 个固件, 并发 3, 超时 120s
+[2026-09-28 14:24:21] [kb][无KB] 3389 (0.2s)
+[2026-09-28 14:24:21] [kb][无KB] 12255 (0.2s)
+[2026-09-28 14:24:21] [kb][无KB] 3 (0.2s)
+[2026-09-28 14:24:21]   kb 进度 3/3
+[2026-09-28 14:24:21] kb 完成: 有KB 0/3 → result/smoke/kb_status.csv
+[2026-09-28 14:24:49] kb 阶段: 3 个固件, 并发 3, 超时 120s
+[2026-09-28 14:24:53] [kb][无KB] 3389 (3.8s)
+[2026-09-28 14:24:58] [kb][无KB] 3 (8.9s)
+[2026-09-28 14:24:59] [kb][无KB] 12255 (9.8s)
+[2026-09-28 14:24:59]   kb 进度 3/3
+[2026-09-28 14:24:59] kb 完成: 有KB 0/3 → result/smoke/kb_status.csv
+[2026-09-28 14:25:14] kb 阶段: 1 个固件, 并发 1, 超时 120s
+[2026-09-28 14:25:23] [kb][无KB] 3 (8.7s)
+[2026-09-28 14:25:23]   kb 进度 1/1
+[2026-09-28 14:25:23] kb 完成: 有KB 0/1 → result/smoke/kb_status.csv
+[2026-09-28 14:25:38] kb 阶段: 3 个固件, 并发 3, 超时 120s
+[2026-09-28 14:25:42] [kb][有KB] 3389 (3.8s) → 3389.elf-round1-state7-tbnum210_KB.dat
+[2026-09-28 14:25:48] [kb][有KB] 12255 (9.4s) → 12255.elf-round1-state13-tbnum769_KB.dat
+[2026-09-28 14:25:48] [kb][有KB] 3 (9.7s) → 3.elf-round1-state200-tbnum248_KB.dat
+[2026-09-28 14:25:48]   kb 进度 3/3
+[2026-09-28 14:25:48] kb 完成: 有KB 3/3 → result/smoke/kb_status.csv

@@ -1,0 +1,4 @@
+# The vendored tool trees are byte-for-byte copies of their upstream repositories:
+# never apply end-of-line normalisation to them (-text).  Diffs stay enabled so a reviewer
+# can still see textual changes.
+evaluated_tools_and_configurations/tools/uEmu-test/** -text

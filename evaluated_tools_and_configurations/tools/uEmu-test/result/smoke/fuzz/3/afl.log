@@ -1,0 +1,52 @@
+[0;36mafl-fuzz [1;97m2.56b[0m by <lcamtuf@google.com>
+[1;92m[+] [0mLooks like we're not running on a tty, so I'll be a bit less verbose.[0m
+[1;92m[+] [0mYou have 80 CPU cores and 9 runnable tasks (utilization: 11%).[0m
+[1;92m[+] [0mTry parallel jobs - see /usr/local/share/doc/afl/parallel_fuzzing.txt.[0m
+[1;94m[*] [0mChecking CPU core loadout...[0m
+[1;92m[+] [0mFound a free CPU core, binding to #1.[0m
+[1;94m[*] [0mChecking core_pattern...[0m
+
+[1;91m[-] [0mHmm, your system is configured to send core dump notifications to an
+    external utility. This will cause issues: there will be an extended delay
+    between stumbling upon a crash and having this information relayed to the
+    fuzzer via the standard waitpid() API.
+
+    To avoid having crashes misinterpreted as timeouts, please log in as root
+    and temporarily modify /proc/sys/kernel/core_pattern, like so:
+
+    echo core >/proc/sys/kernel/core_pattern
+[1;94m[*] [0mChecking CPU scaling governor...[0m
+[1;94m[*] [0mSetting up output directories...[0m
+[1;92m[+] [0mOutput directory exists but deemed OK to reuse.[0m
+[1;94m[*] [0mDeleting old session data...[0m
+[1;92m[+] [0mOutput dir cleanup successful.[0m
+[1;94m[*] [0mScanning '/home/czs/uEmu-test/result/smoke/fuzz/3/AFL/3.elf_fuzz_in'...[0m
+[1;92m[+] [0mNo auto-generated dictionary tokens to reuse.[0m
+[1;94m[*] [0mCreating hard links for all input files...[0m
+[1;94m[*] [0mAttempting dry run with 'id:000000,orig:seed_alternating.bin'...[0m
+FAULTcase2 = 0x2 stop = 0x0 
+
+[1;91m[-] [0mOops, the program crashed with one of the test cases provided. There are
+    several possible explanations:
+
+    - The test case causes known crashes under normal working conditions. If
+      so, please remove it. The fuzzer should be seeded with interesting
+      inputs - but not ones that cause an outright crash.
+
+    - The current memory limit (50.0 MB) is too low for this program, causing
+      it to die due to OOM when parsing valid files. To fix this, try
+      bumping it up with the -m setting in the command line. If in doubt,
+      try something along the lines of:
+
+      ( ulimit -Sv $[49 << 10]; /path/to/binary [...] <testcase )
+
+      Tip: you can use http://jwilk.net/software/recidivm to quickly
+      estimate the required amount of virtual memory for the binary. Also,
+      if you are using ASAN, see /usr/local/share/doc/afl/notes_for_asan.txt.
+
+    - Least likely, there is a horrible bug in the fuzzer. If other options
+      fail, poke <lcamtuf@coredump.cx> for troubleshooting tips.
+)B[?25h[0m[1;91m
+[-] PROGRAM ABORT : [1;97mTest case 'id:000000,orig:seed_alternating.bin' results in a crash[1;91m
+         Location : [0mperform_dry_run(), afl-fuzz.c:2807
+
