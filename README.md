@@ -153,7 +153,7 @@ evaluation_framework/scripts/quickstart.sh           # 5 hard-coded samples, 2 m
 evaluation_framework/scripts/quickstart.sh --full    # every sample, shipped 1 h fuzz budget
 ```
 
-`quickstart.sh` builds the image if it is missing, starts the container (first boot initialises PostgreSQL and creates the `akiba-instance`), provisions whichever of the six tools are still missing, fetches the sample set when `--samples-url` is given (otherwise it uses the empirical-study images that ship with the artifact), imports the selection and then runs the pipeline — `00b` pre-analysis → `01` FirmXRay → `02b` admission → `03` Fuzzware → `04` Hoedur → `05` MultiFuzz → `06`/`06b` FirmRCA → `02` Firmline — and finally exports and summarises the result tables. Stage `02b` runs the admission tests of fuzzware, hoedur and MultiFuzz over the pre-analysis project and records, per firmware, whether the seeds are admissible (tables `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results`); it is the stage that separates "cannot be fuzzed" from "fuzzed badly" (paper §V).
+`quickstart.sh` builds the image if it is missing, starts the container (first boot initialises PostgreSQL and creates the `akiba-instance`), provisions whichever of the tool trees are still missing, fetches the sample set when `--samples-url` is given (otherwise it uses the empirical-study images that ship with the artifact), imports the selection and then runs the pipeline — `00b` pre-analysis → `01` FirmXRay → `02b` admission → `03` Fuzzware → `03b` P²IM → `04` Hoedur → `05` MultiFuzz → `06`/`06b` FirmRCA → `02` Firmline — and finally exports and summarises the result tables. Stage `02b` runs the admission tests of fuzzware, hoedur and MultiFuzz over the pre-analysis project and records, per firmware, whether the seeds are admissible (tables `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results`); it is the stage that separates "cannot be fuzzed" from "fuzzed badly" (paper §V).
 
 The tool provisions live in named volumes (`akiba_home`, `akiba_local`, `akiba_conda`), so later runs skip them; `quickstart.sh` wipes only the pipeline state (database, Ghidra/fuzzware projects) by default, which is what makes a repeated test reproducible. Pass `--keep-state` to resume instead, `--samples 804,3349` to test other ids, or `--list-stages` to see the stage table.
 
@@ -175,7 +175,7 @@ and are not defects:
 
 ## A.4 Evaluation Workflow
 
-The artifact automates the full evaluation pipeline, which follows the paper's four stages — **Stage 1 Reconnaissance** (`00b` pre-analysis, `01` FirmXRay, `02` Firmline), **Stage 2 Emulation** (`02b` admission, plus the configuration generation and modelling the fuzzware gateway performs for `03`–`05`), **Stage 3 Security Testing** (the fuzzing tasks of `03`–`05`) and **Stage 4 Diagnosis** (`06`/`06b` FirmRCA). Stage `02b` is the explicit split between the first two:
+The artifact automates the full evaluation pipeline, which follows the paper's four stages — **Stage 1 Reconnaissance** (`00b` pre-analysis, `01` FirmXRay, `02` Firmline), **Stage 2 Emulation** (`02b` admission, plus the configuration generation and modelling the fuzzware gateway performs for `03`–`05`), **Stage 3 Security Testing** (the fuzzing tasks of `03`, `03b` P²IM and `04`–`05`) and **Stage 4 Diagnosis** (`06`/`06b` FirmRCA). Stage `02b` is the explicit split between the first two:
 
 ```bash
 evaluation_framework/scripts/run_pipeline.sh               # all stages in dependency order
@@ -215,7 +215,7 @@ The mapping to the paper's stages, its experiments, and the canonical result fil
 |---|---|---|---|---|
 | Stage 1 — Reconnaissance | E1: recovery and verification of base addresses and entry points | `00_import`, `00b_analyze`, `01_firmxray`, `02_firmline` | `firmxray_results`, `firmline_results` | `evaluation_results/stage_1.csv` |
 | Stage 2 — Emulation | E2: whether firmware passing reconnaissance can be initialized by the emulation tools | `02b_admission`, plus the `FuzzwareGateway` task of `03`–`05` | `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results` | `evaluation_results/stage_2.csv` |
-| Stage 3 — Security Testing | E3: fuzzing applicability and effectiveness (coverage, crashes, hangs) | fuzzing tasks of `03_fuzzware`, `04_hoedur`, `05_multifuzz`, plus crash replay and statistics | `firmxray_on_fuzzware_results`, `firmxray_fuzzware_replay_crashes`, `hoedur_fuzz_results`, `hoedur_statistics_results`, `multifuzz_results` | `evaluation_results/stage_3.csv` |
+| Stage 3 — Security Testing | E3: fuzzing applicability and effectiveness (coverage, crashes, hangs) | fuzzing tasks of `03_fuzzware`, `03b_p2im` (P²IM, related work, run directly), `04_hoedur`, `05_multifuzz`, plus crash replay and statistics | `firmxray_on_fuzzware_results`, `firmxray_fuzzware_replay_crashes`, `hoedur_fuzz_results`, `hoedur_statistics_results`, `multifuzz_results`, `p2im_fuzzing_results` | `evaluation_results/stage_3.csv` |
 | Stage 4 — Diagnosis | E4: post-fuzzing diagnosis with FirmRCA and manual validation | `06_firmrca`, `06b_firmrca_classify` | `firmrca_results`, `firmrca_classified_results` | `evaluation_results/stage_4.csv` |
 
 Expected effort, taken from the artifact appendix and included in the single pipeline run: E1 ≈ 10
