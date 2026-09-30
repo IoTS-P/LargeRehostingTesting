@@ -155,6 +155,26 @@ and the runtime image handle all three:
   carries them and the provisioner installs them when a container was created without them.
 Provisioning is `scripts/setup_tools.sh p2im`.
 
+## Stage 03c — µEmu (Stage 3 Security Testing)
+
+`scripts/run_uemu_test.sh` runs the µEmu step of Stage 3.  Unlike every other stage it is not a
+framework config: `uEmu-test` is a self-contained CLI (`pipeline.py`: cfg → kb → fuzz → analyze →
+coverage) and the reference ran it directly, so the stage is a script that `run_pipeline.sh` invokes
+under the `03c` id, and it writes no database table — its output is CSV under `results/uemu_test/`.
+It works on the same ELFs the P²IM stage's first pass produced, fed in directly with no admission
+premise: µEmu is the paper's second related-work baseline and the step documents that this corpus does
+not run under it.
+
+The harness keeps a batch per seed (`firmware/<batch>/<fw>/{<fw>.elf,<fw>.cfg}`), so the stage runs the
+`artifact` batch with `testcases/seed_alternating.bin`.  `cfg` derives each firmware's memory layout
+from the ELF's LOAD segments and needs no µEmu; `kb` (knowledge-base extraction) and `fuzz` (AFL dry run
+plus µEmu fuzzing) need µEmu built with S2E — `$uEmuDIR/build`, libs2e, the patched `AFL/afl-fuzz` —
+and KVM for the guest, none of which the container carries.  So `kb` is attempted once with a short
+probe budget, the tool's own message is what the run records, and `analyze`/`coverage` classify the
+result (`results.csv`: 正常fuzz / 提前退出 / 卡死).  The dataset-level verdict comes from the harness's
+own run on a µEmu host; see `README.md` (stage `03c`) and `provenance.md` for that record and for the
+three interpreter traps this stage shares with the P²IM one.
+
 ## Stage 04 — Hoedur (Stage 3 Security Testing)
 
 `HoedurFuzz` converts the fuzzware config to a hoedur config

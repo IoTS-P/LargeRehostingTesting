@@ -180,6 +180,26 @@ the image uses. Three observations worth keeping:
   34-firmware fixture set - 32 `FAILED_EARLY_ABORT`, 1 `SUCCESS_TIMEOUT`, all with 0 crashes and 0 hangs -
   which is the reference's corpus-wide result (`Crashes: 0, Hangs: 0`) in miniature.  A failed firmware
   does **not** abort the run: all 33 firmware were attempted after the first failure.
+* How µEmu was run — `uEmu-test` (Orantree957/uEmu-test, pinned `b8f8500e`) is a harness around the
+  µEmu snapshot (MCUSec/uEmu): `pipeline.py` runs cfg → kb → fuzz → analyze → coverage, one batch per
+  seed, and classifies each firmware (正常fuzz / 提前退出 / 卡死).  The reference deployment never
+  carried µEmu — no config, no module, nothing under `/data` — so unlike P²IM there is no module or JAR
+  variant to reconcile; the artifact ships both trees and drives the harness directly
+  (`scripts/run_uemu_test.sh`, stage id `03c`).
+* What the container reproduces, and where it stops — on two corpus ELFs the harness derives 539-byte
+  configs (`rom = 0x08000000,0x20000`, `ram = 0x20000000,0x50000`, `vtor = 0x08000000`) against the
+  reference's 544-byte ones, and renders `launch-uEmu.sh` (2,569 B), `uEmu-config.lua` and `library.lua`
+  per firmware.  `kb` then reports 无KB: the snapshot is source only — no `build/`, no patched
+  `AFL/afl-fuzz` — and building it needs S2E plus KVM, which a container cannot provide.  The
+  firmware-level verdict therefore comes from the harness's own record: in the smoke batch shipped with
+  it, KB extraction succeeds (`有KB`, 3.8–9.7 s) and all three firmwares end `提前退出`
+  (`end_type = early`, `fuzzer:dry-run种子crash`) with the evidence line
+  `Test case 'id:000000,orig:seed_alternating.bin' results in a crash`.
+* Three interpreter traps, the same class the P²IM stage documents (a tool upstream ran on one specific
+  host): µEmu's `uEmu-helper.py` calls `configparser.SafeConfigParser`, removed in Python 3.12 while the
+  container's default `python3` is 3.14, so the harness must run on ≤ 3.11; it needs Jinja2 as well as
+  the PyYAML its README lists; and `pipeline.py` invokes that helper as a bare `python3`, so the chosen
+  interpreter has to sit on PATH as `python3` — the same shape as the P²IM `p2im-py38` bin directory.
 * Two host facts the reference simply had and a container does not.  Its kernel ran `core_pattern=core`,
   whereas a container inherits the host's (this host: `|/usr/share/apport/apport -p%p ...`), which makes
   AFL 2.06b refuse to start — so `docker/docker-compose.yml` and the Dockerfile export AFL's own escape

@@ -18,6 +18,7 @@ DB_INSTANCE=akiba-instance
 c_red()   { printf '\033[31m%s\033[0m\n' "$*"; }
 c_green() { printf '\033[32m%s\033[0m\n' "$*"; }
 c_blue()  { printf '\033[34m%s\033[0m\n' "$*"; }
+c_yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
 die()     { c_red "ERROR: $*"; exit 1; }
 
 # Are we inside the pipeline container?

@@ -20,7 +20,7 @@ if ! in_container; then
   exec docker exec -i "$CONTAINER" bash -lc "bash /opt/rehosting/scripts/setup_tools.sh $*"
 fi
 
-ALL_TOOLS=(firmxray firmline fuzzware hoedur multifuzz firmrca p2im)
+ALL_TOOLS=(firmxray firmline fuzzware hoedur multifuzz firmrca p2im uemu)
 CHECK_ONLY=0
 REQUESTED=()
 for arg in "$@"; do
@@ -514,6 +514,80 @@ link_tool_clis() {
   [ "$linked" -gt 0 ] && c_green "    linked $linked CLI(s) from the venvs into /usr/local/bin"
 }
 
+# µEmu: the artifact ships two trees - the uEmu-test harness (Orantree957/uEmu-test) and the µEmu
+# snapshot it drives (MCUSec/uEmu, pinned like every other tool).  Running a firmware needs µEmu
+# built with S2E: libs2e.so, the mps2-ans2e QEMU build under $uEmuDIR/build, the patched
+# AFL/afl-fuzz, and KVM for the guest.  None of that can be shipped here, so this prepares what the
+# cfg step needs (the harness, PyYAML) and applies the harness's source changes to the snapshot so a
+# µEmu host can build it, then reports plainly which steps a container cannot reach - which is what
+# the stage records per firmware as FAILED_ENV_UNSUPPORTED.
+provision_uemu_test() {
+  local harness="$TOOLS_ROOT/uEmu-test" uemu="$TOOLS_ROOT/uEmu"
+  c_blue "==> µEmu (uEmu-test harness + the µEmu snapshot it drives)"
+  [ -d "$harness" ] || { c_red "    $harness missing"; return 1; }
+  [ -d "$uemu" ]    || { c_red "    $uemu missing"; return 1; }
+  [ -f "$harness/pipeline.py" ] || { c_red "    $harness/pipeline.py missing"; return 1; }
+  [ -f "$uemu/uEmu-helper.py" ] || { c_red "    $uemu/uEmu-helper.py missing"; return 1; }
+
+  if [ "$CHECK_ONLY" = 1 ]; then
+    c_blue "    check: $harness/pipeline.py, $harness/testcases/, $uemu/uEmu-helper.py, $uemu/calculate.py"
+    c_blue "    harness needs PyYAML + Jinja2 on Python <= 3.11 (configparser.SafeConfigParser)"
+    return 0
+  fi
+
+  # The harness needs PyYAML *and* Python <= 3.11: pipeline.py and µEmu's uEmu-helper.py call
+  # configparser.SafeConfigParser(), which Python 3.12 removed (the container's default python3 may
+  # be newer - /opt/conda/bin/python3 is 3.14).  Install into the interpreter the runner will pick
+  # (the first of these that exists), through that very interpreter: a bare `pip3` may belong to a
+  # different Python and drops the module where the harness never looks ("需要 PyYAML").
+  local py candidate="" chosen=""
+  for candidate in python3.11 python3.10 python3.9 python3.8 /usr/bin/python3 /usr/bin/python3.8; do
+    command -v "$candidate" >/dev/null 2>&1 || continue
+    py=$(command -v "$candidate")
+    if "$py" -c 'import yaml, configparser; configparser.SafeConfigParser' >/dev/null 2>&1; then chosen="$py"; break; fi
+    if [ -z "$chosen" ] && "$py" -c 'import configparser; configparser.SafeConfigParser' >/dev/null 2>&1; then chosen="$py"; fi
+  done
+  if [ -z "$chosen" ]; then
+    c_yellow "    no Python <= 3.11 found: the harness cannot run (it uses configparser.SafeConfigParser)"
+    return 0
+  fi
+  # The harness needs PyYAML; µEmu's uEmu-helper.py additionally renders its launch templates with
+  # Jinja2 (its README lists only pyyaml, so this surprises a first run with ModuleNotFoundError).
+  if ! "$chosen" -c 'import yaml, jinja2' >/dev/null 2>&1; then
+    run_logged uemu sudo -n "$chosen" -m pip install --no-input -q --break-system-packages pyyaml jinja2 \
+      || run_logged uemu "$chosen" -m pip install --no-input -q --break-system-packages pyyaml jinja2 \
+      || run_logged uemu sudo -n "$chosen" -m pip install --no-input -q pyyaml jinja2 \
+      || c_yellow "    could not install pyyaml/jinja2"
+  fi
+  if "$chosen" -c 'import yaml, jinja2, configparser; configparser.SafeConfigParser' >/dev/null 2>&1; then
+    c_green "    harness interpreter: $chosen ($("$chosen" -V 2>&1))"
+  else
+    c_yellow "    $chosen still lacks PyYAML - the harness will not start"
+  fi
+
+  # The harness's source changes give the µEmu AFL and its s2e plugin a per-instance shared-memory
+  # key offset (AFL_KEY_OFFSET) so concurrent instances do not clobber each other's segment.  Apply
+  # them here; they only take effect after a µEmu rebuild, which needs an S2E toolchain.
+  if [ -f "$harness/uEmu-source-changes.patch" ] && [ ! -f "$uemu/.uemu-test-patch-applied" ]; then
+    if ( cd "$uemu" && patch -p1 --dry-run --silent -i "$harness/uEmu-source-changes.patch" >/dev/null 2>&1 ); then
+      if run_logged uemu patch -p1 --silent -i "$harness/uEmu-source-changes.patch"; then
+        touch "$uemu/.uemu-test-patch-applied"
+        c_green "    applied uEmu-source-changes.patch (shared-memory key offset; rebuild AFL for it to take effect)"
+      fi
+    else
+      c_yellow "    uEmu-source-changes.patch did not apply cleanly - check the µEmu snapshot's version"
+    fi
+  fi
+
+  if [ -d "$uemu/build" ]; then
+    c_green "    µEmu build/ present: kb and fuzz can run (KVM still required for the guest)"
+  else
+    c_yellow "    µEmu build/ absent: the kb and fuzz steps cannot run on this host."
+    c_yellow "    cfg still runs (it reads the ELF's LOAD segments), and the stage records"
+    c_yellow "    FAILED_ENV_UNSUPPORTED per firmware with the harness's own message."
+  fi
+}
+
 # ---------------------------------------------------------------- driver
 rc=0
 for tool in "${REQUESTED[@]}"; do
@@ -526,6 +600,7 @@ for tool in "${REQUESTED[@]}"; do
     multifuzz) provision_multifuzz || rc=1 ;;
     firmrca)   provision_firmrca   || rc=1 ;;
     p2im)      provision_p2im      || rc=1 ;;
+    uemu)      provision_uemu_test || rc=1 ;;
     *) die "unknown tool '$tool' (choose from: ${ALL_TOOLS[*]})" ;;
   esac
 done
