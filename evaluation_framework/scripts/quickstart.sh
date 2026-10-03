@@ -21,7 +21,8 @@
 #      downloaded from Google Drive first (evaluation_framework/scripts/fetch_samples_gdrive.sh)
 #   5. import the sample selection (5 ids by default, everything with --full)
 #   6. run the pipeline in the paper's four stages: Stage 1 Reconnaissance (00b, 01, 02) ->
-#      Stage 2 Emulation (02b) -> Stage 3 Security Testing (03/04/05) -> Stage 4 Diagnosis (06/06b)
+#      Stage 2 Emulation (02b) -> Stage 3 Security Testing (03/04/05 plus the two related-work
+#      baselines, 03b P²IM and 03c µEmu) -> Stage 4 Diagnosis (06/06b)
 #   7. export the result tables to evaluation_results/db/ and print a summary
 set -uo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -32,7 +33,7 @@ set -uo pipefail
 # paper discusses: 804 (A-group NPE), 1179, 224, 227 (vulnerability cases) and 3349
 # (the FirmRCA limitation case).  Keep them small — they are imported and fuzzed per run.
 DEFAULT_SAMPLES=(804 1179 224 227 3349)
-STAGE_ORDER="00b,01,02b,03,04,05,06,06b,02"
+STAGE_ORDER="00b,01,02b,03,03b,03c,04,05,06,06b,02"
 QUICK_FUZZ_TIME="2m"
 
 FULL=0; BUILD=0; FRESH=1; DO_SAMPLES=1; SKIP_PROVISION=0
@@ -104,9 +105,11 @@ else
   have_tool /data/tools/hoedur/target/release/libqemu-system-arm.release.so || missing+=(hoedur)
   have_tool /data/tools/MultiFuzz/target/release/multifuzz        || missing+=(multifuzz)
   have_tool /data/tools/FirmRCA/src/src/reversenolog              || missing+=(firmrca)
+  have_tool /data/tools/p2im/afl/afl-fuzz                         || missing+=(p2im)
+  have_tool /data/tools/uEmu-test/pipeline.py                     || missing+=(uemu)
   docker exec "$CONTAINER" bash -lc 'command -v r2 >/dev/null'    || missing+=(radare2)
   if [ ${#missing[@]} -eq 0 ]; then
-    ok "all six tools already provisioned"
+    ok "all evaluated and related-work tools already provisioned"
   else
     c_blue "    provisioning: ${missing[*]} (long: radare2/conda/venvs are in the image and volumes already)"
     bash "$(dirname "${BASH_SOURCE[0]}")/setup_tools.sh" || die "tool provisioning failed"
@@ -190,11 +193,16 @@ step "7/7 results"
 for t in binaries firmxray_results firmxray_on_fuzzware_results \
          firmxray_on_fuzzware_replay_results firmxray_fuzzware_replay_crashes \
          firmxray_on_fuzzware_stat_results hoedur_fuzz_results hoedur_statistics_results \
-         multifuzz_results firmrca_results firmline_results; do
+         multifuzz_results p2im_fuzzing_results firmrca_results firmline_results; do
   f="$REPO_ROOT/evaluation_results/db/$t.csv"
   if [ -f "$f" ]; then printf '    %-40s %5s rows\n' "$t" "$(( $(wc -l < "$f") - 1 ))"
   else printf '    %-40s (no table)\n' "$t"; fi
 done
+# 03c writes no database table: the uEmu-test harness classifies in its own CSVs
+if [ -f "$REPO_ROOT/evaluation_results/uemu_test/results.csv" ]; then
+  printf '    %-40s %5s rows (CSV: 正常fuzz/提前退出/卡死)\n' "uemu_test/results.csv" \
+    "$(( $(wc -l < "$REPO_ROOT/evaluation_results/uemu_test/results.csv") - 1 ))"
+else printf '    %-40s (not run)\n' "uemu_test/results.csv"; fi
 echo
 c_green "results in evaluation_results/db/*.csv, logs in evaluation_results/logs/"
 [ "$rc" = 0 ] || c_red "the pipeline reported failures — check the stage logs above"
