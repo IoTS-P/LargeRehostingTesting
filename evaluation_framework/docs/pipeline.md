@@ -84,7 +84,7 @@ check, never a fuzzing run — no timeout is needed and the reference configs ca
 6.8 s for the fixture in this repository, 17.7 s on average over the reference server's 2,468
 rows (the 387 s maximum is a seed that hangs until its own physical time limit). Note also that the container's tool mounts can go stale
 after the host drive is re-mounted: if `/data/tools/<tool>` shows `d?????????`,
-`docker restart largerehosting_akiba` restores them (both `run_pipeline.sh` and the stage will
+`docker restart akiba_for_artifacts` restores them (both `run_pipeline.sh` and the stage will
 otherwise fail with an unreadable-tool error).
 ## Stage 03 — Fuzzware (FuzzwareGateway = Stage 2 Emulation; fuzzing/replay/statistics = Stage 3 Security Testing)
 

@@ -7,7 +7,7 @@ the one-shot run down to a single stage, a single module or a single firmware.
 ```
 evaluation_framework/
 ├── README.md            this file
-├── docker/              Dockerfile, docker-compose.yml, entrypoint — builds akiba_allinone:<version>
+├── docker/              Dockerfile, docker-compose.yml, entrypoint — builds akiba_for_artifacts:<version>
 ├── docs/                pipeline.md (stage-by-stage, thresholds), provenance.md (pinned commits)
 ├── framework/           Akiba 3.1.2 sources (subprojects/), prebuilt module JARs, Gradle files
 ├── pipeline_configs/    one JSON run config per stage: 00_import, 00b_analyze, 01_firmxray,
@@ -248,7 +248,7 @@ A single config, without the wrapper (the same thing `--only` does, useful when 
 config and want to see the raw module output):
 
 ```bash
-scripts/shell.sh    # or: docker exec -it largerehosting_akiba bash
+scripts/shell.sh    # or: docker exec -it akiba_for_artifacts bash
 cd /home/akiba/akiba_framework
 ./bin/akiba_framework -c /data/pipelines/03_fuzzware.json@/main
 ```
@@ -275,7 +275,7 @@ scripts/smoke_test.sh                     # container-only check: built-in ELF +
 |---|---|---|---|
 | `quickstart.sh` | host | one-shot: image if missing, container up, per-tool provision probe, samples, import, all stages, export, summary | `scripts/quickstart.sh --full` |
 | `pipeline.sh` | host | older full-run wrapper: build → up → provision → import → stages → export | `scripts/pipeline.sh --only 01,03` |
-| `build.sh` | host | builds the image `akiba_allinone:<version>`; `PROVISION_TOOLS=1` also builds the six tools (hours) | `PROVISION_TOOLS=1 scripts/build.sh` |
+| `build.sh` | host | builds the image `akiba_for_artifacts:<version>`; `PROVISION_TOOLS=1` also builds the six tools (hours) | `PROVISION_TOOLS=1 scripts/build.sh` |
 | `up.sh` | host | starts the container and waits until the database daemon answers | `scripts/up.sh` |
 | `down.sh` | host | stops/removes the container; volumes are kept unless `--wipe` | `scripts/down.sh --wipe` |
 | `setup.sh` | host | checks out the tool submodules at the pinned commits, optional nested submodules, applies `patches/` | `scripts/setup.sh --with-nested` |

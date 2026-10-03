@@ -211,7 +211,7 @@ def run_one(container: str, args, row: dict, base: str, original_path: str) -> d
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--container", default=os.environ.get("AKIBA_CONTAINER", "largerehosting_akiba"))
+    ap.add_argument("--container", default=os.environ.get("AKIBA_CONTAINER", "akiba_for_artifacts"))
     ap.add_argument("--threshold", type=float, default=0.1,
                     help="basic_block_cov cut-off for the sampling pass (default 0.1)")
     ap.add_argument("--ids", nargs="*", help="restrict to these firmware ids (space or comma separated)")

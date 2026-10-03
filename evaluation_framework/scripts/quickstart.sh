@@ -62,10 +62,10 @@ have_tool() { docker exec "$CONTAINER" test -e "$1" 2>/dev/null; }
 
 # ---------------------------------------------------------------- 1. image
 step "1/7 image"
-if [ "$BUILD" = 1 ] || ! docker image inspect akiba_allinone:3.1.2 >/dev/null 2>&1; then
+if [ "$BUILD" = 1 ] || ! docker image inspect akiba_for_artifacts:3.1.2 >/dev/null 2>&1; then
   bash "$(dirname "${BASH_SOURCE[0]}")/build.sh" || die "image build failed"
 else
-  ok "akiba_allinone:3.1.2 present (use --build to rebuild)"
+  ok "akiba_for_artifacts:3.1.2 present (use --build to rebuild)"
 fi
 
 # ---------------------------------------------------------------- 2. container
