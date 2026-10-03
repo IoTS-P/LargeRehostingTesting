@@ -30,8 +30,8 @@ name: largerehosting
 
 services:
   akiba:
-    container_name: largerehosting_akiba
-    image: akiba_allinone:${VERSION:-3.1.2}
+    container_name: akiba_for_artifacts
+    image: akiba_for_artifacts:${VERSION:-3.1.2}
     environment:
       # P2IM runs AFL 2.06b, which refuses to start when the kernel's core_pattern begins with
       # a pipe (the container sees the host's, e.g. apport or systemd-coredump).  The upstream

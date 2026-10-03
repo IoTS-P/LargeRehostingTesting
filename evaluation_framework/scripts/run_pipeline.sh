@@ -124,7 +124,7 @@ fi
 for d in /data/tools /data/pipelines /data/samples /data/results; do
   if [ ! -r "$d" ] || ! ls "$d" >/dev/null 2>&1; then
     c_red "bind mount $d is not readable — the host drive was (re)mounted after the container started"
-    c_red "fix: docker restart largerehosting_akiba      # pipeline state lives in the named volumes"
+    c_red "fix: docker restart akiba_for_artifacts      # pipeline state lives in the named volumes"
     exit 1
   fi
 done

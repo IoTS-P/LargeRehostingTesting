@@ -113,7 +113,7 @@ evaluation_framework/scripts/apply_patches.sh            # apply the captured ov
 ### A.3.3 Building the container
 
 ```bash
-evaluation_framework/scripts/build.sh                    # build akiba_allinone:3.1.2 (~15 min)
+evaluation_framework/scripts/build.sh                    # build akiba_for_artifacts:3.1.2 (~15 min)
 ```
 
 ### A.3.4 Starting the container
@@ -200,7 +200,7 @@ print(json.dumps({'entries':[{'path':f'empirical_study_samples/{f.name}'} for f 
 
 # import only those images (paths are relative to /data/samples); a hand-written list is
 # required because import_samples.sh imports everything under evaluation_samples/
-docker exec -i largerehosting_akiba bash -lc 'cd /home/akiba/akiba_framework && \
+docker exec -i akiba_for_artifacts bash -lc 'cd /home/akiba/akiba_framework && \
   ./bin/akiba_framework -c /data/pipelines/00_import.json@/main \
                         -i /data/results/generated/import_list_verify.json'
 
@@ -266,7 +266,7 @@ The study material is a single document, `empirical_study/README.md`.  It define
   | **Total** | **19,011** | |
 
 - **`dataset_identification_and_reconstruction/Dataset.csv`** provides the identified metadata: hash, vendor name, OS, device/MCU model and source dataset identifier.
-- The container image (`akiba_allinone:3.1.2`) ships no firmware: images stay in the host-mounted `evaluation_samples/` directory and the database is initialised empty by the entrypoint.
+- The container image (`akiba_for_artifacts:3.1.2`) ships no firmware: images stay in the host-mounted `evaluation_samples/` directory and the database is initialised empty by the entrypoint.
 
 ## A.7 Tool Building and Runtime Dependencies
 
@@ -293,7 +293,7 @@ The module JARs are compiled by `evaluation_framework/scripts/build_akiba_module
 
 ## A.8 Container Image
 
-The container (`akiba_allinone:3.1.2`) is built with:
+The container (`akiba_for_artifacts:3.1.2`) is built with:
 
 ```bash
 evaluation_framework/scripts/build.sh
