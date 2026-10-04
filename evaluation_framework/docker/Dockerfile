@@ -120,9 +120,23 @@ COPY evaluation_framework/scripts/build_akiba_modules.py /build/build_akiba_modu
 # creating each task, so it cannot build a clean tree in one Gradle invocation:
 # scripts/build_akiba_modules.py parses the dependency graph out of build.gradle.kts and
 # builds the modules in topological batches.
+#
+# Second, less obvious input: every module compiles against the fileTree "modules/*.jar"
+# of akiba_modules (the Public configuration in its build.gradle.kts), and the Ghidra
+# helpers the modules use (MemoryUtil, DisasmHelper, MemorySection, ...) only exist in
+# amod-AkibaUtils, which is built by the akiba_mod_utils subproject.  akiba_modules/modules/
+# is git-ignored, so in a fresh checkout it is empty and the module compiler reports a wall
+# of unresolved references (EntryFinder, FuzzwareStat, HasRTOS, HoedurStatistics,
+# IoTGeneralStructures, ProgramInitialization, ...) instead of the real cause.  Stage the
+# JAR into that directory before the batches run; the tracked copy under dockerfile_needed/
+# is the fallback for a tree where the subproject build did not produce one.
 RUN set -eux; cd /build/framework; chmod +x gradlew; \
     GRADLE=/opt/gradle-8.8/bin/gradle; \
     $GRADLE --no-daemon --console=plain ":akiba_framework:distZip" ":akiba_db_daemon:distZip" ":akiba_mod_utils:moduleJar-AkibaUtils"; \
+    mkdir -p subprojects/akiba_modules/modules; \
+    cp subprojects/akiba_mod_utils/build/libs/amod-AkibaUtils-*.jar subprojects/akiba_modules/modules/ \
+        || cp dockerfile_needed/amod-AkibaUtils-1.0.jar subprojects/akiba_modules/modules/; \
+    ls -l subprojects/akiba_modules/modules; \
     chmod +x /build/build_akiba_modules.py; \
     python3 /build/build_akiba_modules.py \
         --project /build/framework/subprojects/akiba_modules \

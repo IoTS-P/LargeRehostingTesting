@@ -51,17 +51,33 @@ c_blue "==> using Gradle: $GRADLE"
 # itself fails ("Could not create task … amod-<dep>.jar (No such file or directory)").
 # scripts/build_akiba_modules.py parses the module list and the dependency graph and builds
 # them in topological batches — the Dockerfile uses the same helper.
+# Every module compiles against the fileTree "modules/*.jar" of akiba_modules (its `Public`
+# configuration), which is where the akiba_mod_utils helpers (MemoryUtil, DisasmHelper,
+# MemorySection, ...) have to be visible from.  That directory is git-ignored, so a tree that
+# has never been built has no JAR in it and every module using those helpers dies with
+# unresolved references that look unrelated (EntryFinder, FuzzwareStat, HasRTOS,
+# HoedurStatistics, IoTGeneralStructures, ProgramInitialization, ...).  Stage one first.
+stage_module_classpath() {
+  mkdir -p "$BUILD/subprojects/akiba_modules/modules"
+  cp "$BUILD"/subprojects/akiba_mod_utils/build/libs/amod-AkibaUtils-*.jar \
+     "$BUILD/subprojects/akiba_modules/modules/" 2>/dev/null \
+    || cp "$BUILD/dockerfile_needed/amod-AkibaUtils-1.0.jar" "$BUILD/subprojects/akiba_modules/modules/" \
+    || die "no AkibaUtils JAR to put on the module compile classpath"
+  c_blue "    compile classpath (akiba_modules/modules): $(ls "$BUILD/subprojects/akiba_modules/modules" | wc -l) jar(s)"
+}
 build_modules() {
   python3 /opt/rehosting/scripts/build_akiba_modules.py \
     --project "$BUILD/subprojects/akiba_modules" --gradle-root "$BUILD" \
     --gradle "$GRADLE" --jobs "${JOBS:-4}" "$@" || die "module build failed"
 }
 if [ "$MODULES_ONLY" = 1 ]; then
+  stage_module_classpath
   build_modules
 else
   $GRADLE --no-daemon --console=plain \
     ":akiba_framework:distZip" ":akiba_db_daemon:distZip" ":akiba_mod_utils:moduleJar-AkibaUtils" \
     || die "framework build failed"
+  stage_module_classpath
   build_modules
 fi
 

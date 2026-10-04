@@ -111,6 +111,27 @@ def main() -> int:
 
     project = Path(args.project).resolve()
     root = Path(args.gradle_root).resolve() if args.gradle_root else project
+
+    # Pre-flight: the modules compile against the fileTree "modules/*.jar" of this project
+    # (the `Public` configuration in build.gradle.kts) and that is the only place the
+    # akiba_mod_utils helpers (MemoryUtil, DisasmHelper, MemorySection, ...) come from.  The
+    # directory is git-ignored, so a fresh checkout has it empty, and every module that uses
+    # those helpers then fails to compile with unresolved references that point at unrelated
+    # things (EntryFinder, FuzzwareStat, HasRTOS, HoedurStatistics, IoTGeneralStructures, ...).
+    # Say so here instead of letting forty Kotlin errors do the talking.
+    classpath_dir = project / "modules"
+    staged = sorted(classpath_dir.glob("*.jar")) if classpath_dir.is_dir() else []
+    if not staged:
+        print(
+            f"   ERROR: {classpath_dir} holds no JAR, so the module compile classpath is empty.\n"
+            "          Every module that calls the akiba_mod_utils Ghidra helpers will fail with\n"
+            "          unresolved references.  Build it and stage it first:\n"
+            "            <gradle> :akiba_mod_utils:moduleJar-AkibaUtils\n"
+            "            mkdir -p <akiba_modules>/modules && cp <akiba_mod_utils>/build/libs/amod-AkibaUtils-*.jar <akiba_modules>/modules/\n"
+            "          (framework/dockerfile_needed/amod-AkibaUtils-1.0.jar is the tracked fallback;\n"
+            "          the Dockerfile and scripts/rebuild_framework.sh do all of this for you.)"
+        )
+        return 2
     build_file = project / "build.gradle.kts"
     modules, deps, excluded = parse_build_file(build_file)
     versions = dict(modules)

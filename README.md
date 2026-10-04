@@ -291,6 +291,8 @@ The last five rows are standalone builds from each tool's own instructions; `eva
 
 The module JARs are compiled by `evaluation_framework/scripts/build_akiba_modules.py` during the Docker build (see `evaluation_framework/docs/provenance.md` §5).  The image ends up with 37 module JARs — `akiba_modules`'s 36 plus `amod-AkibaUtils-1.0.jar` from `akiba_mod_utils` (the Dockerfile builds `:akiba_mod_utils:moduleJar-AkibaUtils` and copies both `build/libs` directories into `akiba_framework/modules/`).  `AkibaUtils` is a *dependency* of the other modules: without it every module aborts with `Module not found: org.iotsplab.akiba.module.AkibaUtils`.
 
+The same JAR is also a *compile-time* input, and that is the one a fresh checkout misses: every module is compiled against the `modules/*.jar` fileTree of `akiba_modules` (the `Public` configuration in its `build.gradle.kts`), which is where the `akiba_mod_utils` helpers (`MemoryUtil`, `DisasmHelper`, `MemorySection`, `Function.allInstructions()`, …) have to be visible from.  `akiba_modules/modules/` is git-ignored, so in a clean tree it is empty and the module compiler reports a wall of unresolved references across unrelated-looking modules (`EntryFinder`, `FuzzwareStat`, `HasRTOS`, `HoedurStatistics`, `IoTGeneralStructures`, …).  The Dockerfile therefore stages the freshly built `amod-AkibaUtils-*.jar` — falling back to the tracked `framework/dockerfile_needed/amod-AkibaUtils-1.0.jar` — into `subprojects/akiba_modules/modules/` before it runs `build_akiba_modules.py`; `scripts/rebuild_framework.sh` stages it the same way, and the helper itself refuses to start (exit 2) when that directory holds no JAR.
+
 ## A.8 Container Image
 
 The container (`akiba_for_artifacts:3.1.2`) is built with:
