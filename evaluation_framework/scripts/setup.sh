@@ -54,21 +54,59 @@ for path in "${!PINS[@]}"; do
   fi
 done
 
+SETUP_RC=0
+
 if [ "$WITH_NESTED" = 1 ]; then
   c_blue "==> fetching nested submodules (this pulls radare2, binwalk, qemu patches, …)"
-  for path in "evaluated_tools_and_configurations/tools/firmline" "evaluated_tools_and_configurations/tools/fuzzware" "evaluated_tools_and_configurations/tools/MultiFuzz"; do
+  # gdma belongs in this list: its `pipeline` and `emulator` are submodules as well, and
+  # the admission overlays patch files inside `pipeline/`.  Without it `patch` can only
+  # report "can't find file to patch" for admission-gdma.* and gdma.pipeline.patch.
+  for path in "evaluated_tools_and_configurations/tools/firmline" \
+              "evaluated_tools_and_configurations/tools/fuzzware" \
+              "evaluated_tools_and_configurations/tools/gdma" \
+              "evaluated_tools_and_configurations/tools/MultiFuzz"; do
     echo "--- $path"
-    git -C "$path" submodule update --init --recursive 2>&1 | tail -10 \
-      || c_red "nested update for $path failed"
+    case "$path" in
+      */firmline)
+        # radare2's pinned tree carries one gitlink (test/ravc2_git_branch_test, a
+        # test-only fixture) but ships no .gitmodules, so *any* recursive update dies
+        # there with "fatal: No url found for submodule path
+        # 'radare2/test/ravc2_git_branch_test' in .gitmodules" + "Failed to recurse into
+        # submodule path 'radare2'".  Recursion would fetch nothing anyway (no .gitmodules
+        # means no nested submodules), and the five submodules firmline needs are all
+        # direct children, so init them without recursion.
+        git -C "$path" submodule update --init 2>&1 | tail -10 || true
+        ;;
+      *)
+        git -C "$path" submodule update --init --recursive 2>&1 | tail -10 || true
+        ;;
+    esac
+  done
+  # An empty nested tree is exactly what makes the overlays and the build fail later, so
+  # check the ones they need rather than trusting the loop above.
+  c_blue "==> checking the nested trees the overlays and the build need"
+  for d in firmline/radare2 firmline/bgrep firmline/binwalk firmline/cpu_rec firmline/firmxray \
+           fuzzware/emulator fuzzware/pipeline gdma/emulator gdma/pipeline MultiFuzz/ghidra; do
+    if [ -n "$(ls -A "evaluated_tools_and_configurations/tools/$d" 2>/dev/null)" ]; then
+      c_green "ok      $d"
+    else
+      c_red "MISSING $d"
+      SETUP_RC=1
+    fi
   done
 fi
 
 if [ "$WITH_PATCHES" = 1 ]; then
   c_blue "==> applying tool overlays"
-  bash "$SCRIPT_DIR/apply_patches.sh" || c_red "some patches did not apply (see above)"
+  bash "$SCRIPT_DIR/apply_patches.sh" || { c_red "some patches did not apply (see above)"; SETUP_RC=1; }
 fi
 
 echo
-c_green "setup done."
+if [ "$SETUP_RC" = 0 ]; then
+  c_green "setup done."
+else
+  c_red "setup finished with errors (see the lines above)"
+fi
 echo "next:  scripts/build.sh        # build the container image"
 echo "       scripts/up.sh           # start it"
+exit $SETUP_RC

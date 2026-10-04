@@ -31,8 +31,9 @@ PATCHES=(
 
 # patches that live inside a nested submodule of a tool.  The vanilla fuzzware snapshot
 # changes its emulator and pipeline submodules, so those two patches are applied inside
-# them (their paths carry no submodule prefix).  The DMA (gdma) snapshot has no nested
-# changes — its emulator/pipeline commits are pinned by setup.sh instead.
+# them (their paths carry no submodule prefix).  gdma's `pipeline` is a nested submodule
+# as well — setup.sh --with-nested fetches it (the parent commit's gitlink pins the
+# commit), and gdma.pipeline.patch is applied inside it.
 NESTED_PATCHES=(
   "evaluated_tools_and_configurations/patches/fuzzware.emulator.patch:evaluated_tools_and_configurations/tools/fuzzware/emulator"
   "evaluated_tools_and_configurations/patches/fuzzware.pipeline.patch:evaluated_tools_and_configurations/tools/fuzzware/pipeline"
@@ -41,6 +42,29 @@ NESTED_PATCHES=(
 
 applied()  { git -C "$1" apply --reverse --check "$2" >/dev/null 2>&1; }
 appliable() { git -C "$1" apply --check "$2" >/dev/null 2>&1; }
+
+# A patch stops being applicable in either direction once another overlay has rewritten
+# the same lines — fuzzware.pipeline.patch and the admission-fuzzware diffs both touch
+# fuzzware/pipeline/fuzzware_pipeline/*.py.  Reporting that as "does NOT apply" is a false
+# alarm, so fall back to a content check: every substantive "+" line must exist in its
+# target file.  Comment-only additions are ignored, because a captured reference diff keeps
+# commented-out variants that a later revision may have dropped while keeping the change.
+postimage_present() { # <dir> <patch>
+  local dir="$1" patch="$2" f line
+  while read -r f; do
+    [ -n "$f" ] || continue
+    [ -f "$REPO_ROOT/$dir/$f" ] || return 1
+    while IFS= read -r line; do
+      [ -n "${line//[[:space:]]/}" ] || continue
+      case "${line#"${line%%[![:space:]]*}"}" in \#*) continue ;; esac
+      grep -qxF "$line" "$REPO_ROOT/$dir/$f" || return 1
+    done < <(awk -v want="$f" '
+        /^\+\+\+ /{n=$2; sub(/^[ab]\//, "", n); cur=(n==want); next}
+        /^--- /{cur=0; next}
+        cur && /^\+/ {print substr($0,2)}' "$patch")
+  done < <(awk '/^\+\+\+ /{n=$2; sub(/^[ab]\//, "", n); print n}' "$patch" | sort -u)
+  return 0
+}
 
 # `git diff` in the reference working tree records the file *mode* in the index line
 # but no mode-change hunk, so `git apply` only warns ("has type 100644, expected
@@ -75,6 +99,8 @@ for entry in "${PATCHES[@]}"; do
   case "$MODE" in
     check) if appliable "$REPO_ROOT/$dir" "$REPO_ROOT/$patch"; then
              c_blue "not applied     : $patch"
+           elif postimage_present "$dir" "$REPO_ROOT/$patch"; then
+             c_green "applied         : $patch (content matches; a later overlay re-touched these lines)"
            else
              c_red "does NOT apply  : $patch (submodule dirty or wrong commit?)"; rc=1
            fi ;;
@@ -82,6 +108,9 @@ for entry in "${PATCHES[@]}"; do
              git -C "$REPO_ROOT/$dir" apply "$REPO_ROOT/$patch" \
                && { c_green "applied         : $patch"; fix_modes "$dir" "$REPO_ROOT/$patch"; } \
                || { c_red "apply failed    : $patch"; rc=1; }
+           elif postimage_present "$dir" "$REPO_ROOT/$patch"; then
+             c_green "applied         : $patch (content matches; a later overlay re-touched these lines)"
+             fix_modes "$dir" "$REPO_ROOT/$patch"
            else
              c_red "does NOT apply  : $patch"; rc=1
            fi ;;
@@ -114,7 +143,12 @@ for entry in "${NESTED_PATCHES[@]}"; do
       revert) : ;;
     esac
   else
-    c_red "does NOT apply  : $patch"; rc=1
+    if postimage_present "$dir" "$REPO_ROOT/$patch"; then
+      c_green "applied         : $patch (content matches; a later overlay re-touched these lines)"
+      [ "$MODE" = apply ] && fix_modes "$dir" "$REPO_ROOT/$patch"
+    else
+      c_red "does NOT apply  : $patch"; rc=1
+    fi
   fi
 done
 
@@ -136,10 +170,26 @@ ADMISSION_PATCHES=(
   "evaluated_tools_and_configurations/patches/admission-multifuzz.main.patch:evaluated_tools_and_configurations/tools/MultiFuzz"
 )
 
+# The pre-image side of an admission diff is its target ("--- tools/gdma/pipeline/x.py"),
+# and -p2 strips the first two components, so what remains is the path inside the tool.
+patch_targets() { awk '/^--- /{p=$2; sub(/^[^\/]*\/[^\/]*\//, "", p); print p}' "$1" | sort -u; }
+
 for entry in "${ADMISSION_PATCHES[@]}"; do
   pfile="${entry%%:*}"; dir="${entry##*:}"
   [ -f "$REPO_ROOT/$pfile" ] || { c_red "missing $pfile"; rc=1; continue; }
   [ -d "$REPO_ROOT/$dir" ] || { c_red "missing submodule $dir"; rc=1; continue; }
+  # Several of these diffs patch files inside a *nested* submodule of the tool
+  # (fuzzware/pipeline, gdma/pipeline).  When that has not been fetched, `patch` can only
+  # say "can't find file to patch", which reads like a corrupt patch.  Name the real cause.
+  target_missing=0
+  while read -r t; do
+    [ -n "$t" ] || continue
+    [ -e "$REPO_ROOT/$dir/$t" ] || target_missing=1
+  done < <(patch_targets "$REPO_ROOT/$pfile")
+  if [ "$target_missing" = 1 ]; then
+    c_blue "skipped (target not checked out — run scripts/setup.sh --with-nested): $pfile"
+    continue
+  fi
   if patch -p2 -R --dry-run --forward -i "$REPO_ROOT/$pfile" -d "$REPO_ROOT/$dir" >/dev/null 2>&1; then
     c_green "already applied : $pfile"
   else
@@ -147,7 +197,13 @@ for entry in "${ADMISSION_PATCHES[@]}"; do
       check) if patch -p2 --dry-run --forward -i "$REPO_ROOT/$pfile" -d "$REPO_ROOT/$dir" >/dev/null 2>&1; then
                c_blue "not applied     : $pfile"
              else c_red "does NOT apply  : $pfile"; rc=1; fi ;;
-      apply) if patch -p2 --forward --no-backup-if-mismatch -i "$REPO_ROOT/$pfile" -d "$REPO_ROOT/$dir" >/dev/null 2>&1; then
+      apply) # dry-run first: a failed apply would otherwise leave .rej files behind
+             if ! patch -p2 --dry-run --forward -i "$REPO_ROOT/$pfile" -d "$REPO_ROOT/$dir" >/dev/null 2>&1; then
+               c_red "does NOT apply  : $pfile"
+               patch -p2 --dry-run --forward -i "$REPO_ROOT/$pfile" -d "$REPO_ROOT/$dir" 2>&1 \
+                 | grep -E "^(Hunk|can't find|patching)" | head -4 | sed 's/^/      /'
+               rc=1
+             elif patch -p2 --forward --no-backup-if-mismatch -i "$REPO_ROOT/$pfile" -d "$REPO_ROOT/$dir" >/dev/null 2>&1; then
                c_green "applied         : $pfile"
              else c_red "apply failed    : $pfile"; rc=1; fi ;;
       revert) if patch -p2 -R --forward --no-backup-if-mismatch -i "$REPO_ROOT/$pfile" -d "$REPO_ROOT/$dir" >/dev/null 2>&1; then

@@ -1,6 +1,6 @@
 services:
   app:
-    container_name: akiba_all_in_one
+    container_name: akiba_for_artifacts
     image: akiba_for_artifacts:${VERSION:-3.1.2}
     ports:
       - "0.0.0.0:31779:22"
