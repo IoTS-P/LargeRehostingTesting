@@ -301,6 +301,20 @@ The container (`akiba_for_artifacts:3.1.2`) is built with:
 evaluation_framework/scripts/build.sh
 ```
 
+If any script reports `Permission denied`, the copy you are running from lost the executable bits —
+a zip/tarball transfer, a Windows or NTFS/exFAT intermediate, or a checkout on a filesystem that
+cannot store the bit (`git` records every script as `100644` in that case).  Either run it through
+the interpreter (`bash evaluation_framework/scripts/up.sh`) or restore the bits once:
+
+```bash
+chmod +x evaluation_framework/scripts/*.sh evaluation_framework/docker/entrypoint.sh
+```
+
+The image build does not depend on those bits: the Dockerfile makes the scripts the daemon execs
+directly executable itself (`akiba_db_daemon/bin/*`, `resources/*.sh`, `binaries/*.sh`), and the
+container entrypoint re-checks them on every start, so a mode-stripped volume or archive cannot
+leave the daemon unable to start.
+
 Key characteristics:
 - Base: `ubuntu:24.04`
 - Runtime: JDK 21 (headless), PostgreSQL 16, pgbackrest

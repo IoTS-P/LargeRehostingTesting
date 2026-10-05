@@ -6,8 +6,8 @@ services:
       - "0.0.0.0:31779:22"
       - "0.0.0.0:41777:31777"
     build: .
-    entrypoint: ["/home/akiba/binaries/entrypoint.sh"]
-    command: ["./bin/akiba_db_daemon", "-c", "./resources/config.json"]
+    entrypoint: ["/bin/bash", "/home/akiba/binaries/entrypoint.sh"]
+    command: ["/bin/bash", "./bin/akiba_db_daemon", "-c", "./resources/config.json"]
     working_dir: /home/akiba/akiba_db_daemon
     volumes:
       - /data/hongyuan/hongyuan-24:/data

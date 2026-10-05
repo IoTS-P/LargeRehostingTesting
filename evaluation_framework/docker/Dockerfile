@@ -301,7 +301,8 @@ COPY evaluation_framework/docker/akiba_db_daemon_config.json /home/akiba/akiba_d
 COPY evaluation_framework/docker/motd.txt /etc/motd
 
 RUN set -eux; \
-    chmod +x /home/akiba/binaries/entrypoint.sh /home/akiba/binaries/test_run.sh; \
+    chmod +x /home/akiba/binaries/*.sh; \
+    find /home/akiba/akiba_framework /home/akiba/akiba_db_daemon -name '*.sh' -exec chmod +x {} +; \
     chown -R akiba:akiba /home/akiba; \
     mkdir -p /run/sshd; \
     sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/; s/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config; \
