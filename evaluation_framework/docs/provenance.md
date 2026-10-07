@@ -228,19 +228,21 @@ with `ELFBuilder/cmake-build-debug/ELFBuilder not found in
 modules/amod-ConvertFirmToELF-1.2.jar`, which `ProcedureManager` reports as "latter tasks skipped"
 with no hint about the cause.
 
-The compiled helper therefore ships **in this repository** as
-`framework/dockerfile_needed/ELFBuilder`: a statically linked x86-64 ELF (3,450,632 bytes, sha256
+The compiled helper therefore ships **in this repository**, at the path the module's own resource
+packaging picks up: `subprojects/akiba_modules/src/ConvertFirmToELF/resources/ELFBuilder/cmake-build-debug/ELFBuilder`
+— a statically linked x86-64 ELF (3,450,632 bytes, sha256
 `ebd031b70ace29cb35b93bcaabd3f7af66efdff21ef37c59462bb59ebf52e86b`), taken from the reference JAR
-`amod-ConvertFirmToELF-1.2.jar`, where it had been built with CMake/ninja (that JAR carries
-`cmake-build-debug/{build.ninja,CMakeCache.txt}` next to the binary; the sources live in the
-module's own `resources/ELFBuilder/`).  Static linking means it does not depend on the container's
-glibc.  The Dockerfile and `scripts/rebuild_framework.sh` stage it into
-`build/resources/ConvertFirmToELF/ELFBuilder/cmake-build-debug/` before the module batches run, so a
-tree without `framework/prebuilt-modules/` — every clean clone — builds an
-`amod-ConvertFirmToELF-1.2.jar` that carries the helper.  `FirmRCA`'s `generateDataset.py` is a
-tracked module resource (`src/FirmRCA/resources/`) and is packaged by the rebuild without any
-staging.  The install step still prefers the reference JARs when they are present (on the reference
-machine, or for byte-comparison), but no pipeline stage depends on them any more.
+`amod-ConvertFirmToELF-1.2.jar`, where it had been built with CMake/ninja (`main.cpp`,
+`ELFLoader.cpp` and a `CMakeLists.txt` sit next to it in that resources tree).  Static linking means
+it does not depend on the container's glibc.  The directory is named in the module's own
+`.gitignore` (`cmake-build-debug`) because upstream builds the helper locally, so the file is added
+with `git add -f`; the Jar task then packages it through the ordinary resource set — no build step has
+to copy it anywhere.  Verified: the rebuilt `amod-ConvertFirmToELF-1.2.jar` contains the entry
+`ELFBuilder/cmake-build-debug/ELFBuilder` (3,450,632 bytes), the same path the reference JAR has.
+`FirmRCA`'s `generateDataset.py` is a tracked module resource
+(`src/FirmRCA/resources/`) and is packaged by the rebuild without any staging.  The install step
+still prefers the reference JARs when they are present (on the reference machine, or for
+byte-comparison), but no pipeline stage depends on them any more.
 
 ### Note on directory names
 

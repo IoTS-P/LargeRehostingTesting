@@ -4,4 +4,4 @@
 evaluated_tools_and_configurations/tools/uEmu-test/** -text
 
 # The compiled ConvertFirmToELF helper is a static x86-64 binary; never let git touch its bytes.
-evaluation_framework/framework/dockerfile_needed/ELFBuilder binary
+evaluation_framework/framework/subprojects/akiba_modules/src/ConvertFirmToELF/resources/ELFBuilder/cmake-build-debug/ELFBuilder binary
