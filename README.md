@@ -138,7 +138,7 @@ evaluation_framework/scripts/fetch_samples_gdrive.sh <google-drive-url-or-id>
 
 It accepts a folder link, a file link, `open?id=…` links or a bare id, extracts archives in place, and lands everything in `evaluation_samples/`. The images are stored in the pipeline's own stripped form (see `evaluation_samples/README.md`); `restore_original.py` rebuilds the originals byte-for-byte from `offsets/` when needed.
 
-> **For internal use only:** an `evaluation_framework/scripts/fetch_samples_from_server.sh` script is also provided for users with access to the reference server. It is not part of the public artifact workflow, and it expects `SSHPASS` to be exported in the environment.
+> **Not shipped:** the helper script that mirrored the corpus straight from the authors' reference server (`fetch_samples_from_server.sh`) is deliberately *not* part of this repository — it carried the server's address and login material. Direct server access is arranged with the authors; the public routes for the corpus are the Google Drive import above and the firmware-dataset note in `dataset_identification_and_reconstruction/`.
 
 ### A.3.6 Importing samples
 
@@ -322,7 +322,7 @@ Key characteristics:
 - Orchestration: Akiba framework 3.1.2 (database daemon port 31777, framework CLI)
 - Python: Miniconda with `py310` (Python 3.10) and `firmline` (Python 3.11) environments
 - Languages: Rust (latest stable), Zsh + virtualenvwrapper
-- Services: OpenSSH (host port 31779), Redis
+- Services: OpenSSH (host port 41778), Redis
 - Volume structure (container):
   ```
   /data

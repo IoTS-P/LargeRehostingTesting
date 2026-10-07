@@ -1,14 +1,10 @@
 # Provenance — where every piece of this repo comes from
 
-The pipeline was developed and evaluated inside a container on
-`REFERENCE-HOST` (user `akiba`, host container hostname `6bae1969f827`). That
-container is the reference for this repository; nothing here was re-invented.
-
-Access used while building this repo (read-only on the server):
-
-```bash
-[reference-server login omitted]
-```
+The pipeline was developed and evaluated inside a container on the authors' reference server
+(user `akiba`, host container hostname `6bae1969f827`), read-only from this repository's point of
+view.  That container is the reference for this repository; nothing here was re-invented.  The
+server's address and the login material are deliberately not part of this repository — access is
+arranged with the authors (see the note on the firmware dataset in the top-level README).
 
 ## 1. Tools — upstream commit + overlay
 
@@ -89,7 +85,7 @@ reference container had installed interactively on top of it:
   `ghidraHome` (matching `/data/hongyuan/ghidra_11.3.2_PUBLIC` on the server).
   The pin is load-bearing: a newer SDK (12.0.4) changes stage 01's `entry_valid`
   verdicts for 15 of the 34 fixtures, see §5,
-* sshd, so the container can be driven like the server (host port 31779).
+* sshd, so the container can be driven like the server (host port 41778).
 
 Differences worth knowing: the server's `docker-compose.yml` binds the host
 directory `/data/hongyuan/hongyuan-24` into the container; here the six tool
@@ -225,14 +221,26 @@ those two come from `framework/prebuilt-modules/`.
 
 Two modules extract a file from their own JAR at runtime: `ConvertFirmToELF` unpacks the C++
 `ELFBuilder` binary (`ELFBuilder/cmake-build-debug/ELFBuilder`) and `FirmRCA` unpacks
-`generateDataset.py`. The Kotlin rebuild packages classes only, so the JARs it produces for these
-two carry no payload — ConvertFirmToELF comes out at 122 KB against the reference JAR's 1.85 MB — and
-the module then dies inside `extractFileInJar` with
-`ELFBuilder/cmake-build-debug/ELFBuilder not found in modules/amod-ConvertFirmToELF-1.2.jar`, which
-`ProcedureManager` reports as "latter tasks skipped" with no hint about the cause. The install step
-therefore prefers the reference JAR from `framework/prebuilt-modules/` for exactly these two modules
-(an explicit list in `scripts/rebuild_framework.sh`); every other module keeps the rebuilt JAR, which
-is also where the admission patches live.
+`generateDataset.py`.  The Jar task takes the first one from
+`build/resources/ConvertFirmToELF/ELFBuilder/cmake-build-debug/ELFBuilder`, i.e. from
+`framework/build/`, which is git-ignored; without it the module dies inside `extractFileInJar`
+with `ELFBuilder/cmake-build-debug/ELFBuilder not found in
+modules/amod-ConvertFirmToELF-1.2.jar`, which `ProcedureManager` reports as "latter tasks skipped"
+with no hint about the cause.
+
+The compiled helper therefore ships **in this repository** as
+`framework/dockerfile_needed/ELFBuilder`: a statically linked x86-64 ELF (3,450,632 bytes, sha256
+`ebd031b70ace29cb35b93bcaabd3f7af66efdff21ef37c59462bb59ebf52e86b`), taken from the reference JAR
+`amod-ConvertFirmToELF-1.2.jar`, where it had been built with CMake/ninja (that JAR carries
+`cmake-build-debug/{build.ninja,CMakeCache.txt}` next to the binary; the sources live in the
+module's own `resources/ELFBuilder/`).  Static linking means it does not depend on the container's
+glibc.  The Dockerfile and `scripts/rebuild_framework.sh` stage it into
+`build/resources/ConvertFirmToELF/ELFBuilder/cmake-build-debug/` before the module batches run, so a
+tree without `framework/prebuilt-modules/` — every clean clone — builds an
+`amod-ConvertFirmToELF-1.2.jar` that carries the helper.  `FirmRCA`'s `generateDataset.py` is a
+tracked module resource (`src/FirmRCA/resources/`) and is packaged by the rebuild without any
+staging.  The install step still prefers the reference JARs when they are present (on the reference
+machine, or for byte-comparison), but no pipeline stage depends on them any more.
 
 ### Note on directory names
 

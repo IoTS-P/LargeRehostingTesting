@@ -2,3 +2,6 @@
 # never apply end-of-line normalisation to them (-text).  Diffs stay enabled so a reviewer
 # can still see textual changes.
 evaluated_tools_and_configurations/tools/uEmu-test/** -text
+
+# The compiled ConvertFirmToELF helper is a static x86-64 binary; never let git touch its bytes.
+evaluation_framework/framework/dockerfile_needed/ELFBuilder binary

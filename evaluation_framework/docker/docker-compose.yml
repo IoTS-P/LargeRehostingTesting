@@ -58,7 +58,7 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:41777:31777"   # akiba database daemon
-      - "127.0.0.1:31779:22"      # ssh (like the reference server)
+      - "127.0.0.1:41778:22"      # ssh (like the reference server)
     volumes:
       - "../../evaluated_tools_and_configurations/tools/RealworldFirmware:/data/tools/RealworldFirmware"
       - "../../evaluated_tools_and_configurations/tools/firmline:/data/tools/firmline"

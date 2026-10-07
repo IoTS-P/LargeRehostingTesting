@@ -287,8 +287,7 @@ scripts/smoke_test.sh                     # container-only check: built-in ELF +
 | `run_pipeline.sh` | host or container | the stage runner: `--list`, `--only`, `--skip`, `--restore`, `--fuzz-time`; exports after every stage; refuses to start when the `/data` bind mounts are stale | `scripts/run_pipeline.sh --only 02b` |
 | `import_samples.sh` | container | imports every firmware under `/data/samples` into the akiba instance (`--list` to preview) | `scripts/import_samples.sh --list` |
 | `fetch_samples_gdrive.sh` | host | downloads the published sample set from a Drive link/folder/file id into `evaluation_samples/` | `scripts/fetch_samples_gdrive.sh <url> --dry-run` |
-| `fetch_samples_from_server.sh` | host | **internal**: mirrors the corpus from the reference server in its own layout (stage-01 selection, or `--all` for the 19,011-image library) | `scripts/fetch_samples_from_server.sh --all` |
-| `fetch_reference_modules.sh` | host | **optional**: fetches the reference build's module JARs — for diffing a locally built module JAR, not for the build (their Kotlin metadata 2.3.0 is newer than the compiler this project uses) | `scripts/fetch_reference_modules.sh` |
+| — | — | **not shipped**: `fetch_samples_from_server.sh` and `fetch_reference_modules.sh` carried the reference server's address and login material, so they are deliberately not part of this repository; ask the authors for access | — |
 | `export_results.sh` | host or container | dumps every table and view to `results/db/*.csv` (`--with-artifacts` mirrors the project trees) | `scripts/export_results.sh` |
 | `status.sh` | host | prints the state of the container, the sample set and the collected results | `scripts/status.sh` |
 | `shell.sh` | host | opens a shell inside the container as the `akiba` user | `scripts/shell.sh` |

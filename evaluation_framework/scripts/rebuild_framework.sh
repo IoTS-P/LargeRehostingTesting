@@ -64,6 +64,13 @@ stage_module_classpath() {
     || cp "$BUILD/dockerfile_needed/amod-AkibaUtils-1.0.jar" "$BUILD/subprojects/akiba_modules/modules/" \
     || die "no AkibaUtils JAR to put on the module compile classpath"
   c_blue "    compile classpath (akiba_modules/modules): $(ls "$BUILD/subprojects/akiba_modules/modules" | wc -l) jar(s)"
+  # ConvertFirmToELF packs a compiled helper into its JAR from framework/build/ (git-ignored), and
+  # dies at runtime inside extractFileInJar without it; the binary now ships in dockerfile_needed/.
+  local elf="$BUILD/build/resources/ConvertFirmToELF/ELFBuilder/cmake-build-debug"
+  mkdir -p "$elf"
+  cp "$BUILD/dockerfile_needed/ELFBuilder" "$elf/ELFBuilder" || die "dockerfile_needed/ELFBuilder is missing"
+  chmod +x "$elf/ELFBuilder"
+  c_blue "    ConvertFirmToELF helper staged: $(du -h "$elf/ELFBuilder" | cut -f1)"
 }
 build_modules() {
   python3 /opt/rehosting/scripts/build_akiba_modules.py \
@@ -91,12 +98,12 @@ install_modules() {
   # next to the analysis modules, so it has to be copied explicitly.
   cp "$BUILD"/subprojects/akiba_mod_utils/build/libs/amod-*.jar /home/akiba/akiba_framework/modules/ 2>/dev/null || true
   # Two modules read a file out of their own JAR at runtime — ConvertFirmToELF unpacks the C++
-  # ELFBuilder binary, FirmRCA unpacks generateDataset.py — and this Kotlin build packages classes
-  # only, so the JARs it produces for those two carry no payload.  The module then dies inside
-  # extractFileInJar, which ProcedureManager reports only as "latter tasks skipped", with nothing in
-  # the stage log pointing at the JAR.  So the reference JARs that ship with the artifact win for
-  # exactly these two modules; every other module keeps the rebuilt JAR (which is where the
-  # admission patches live).  See docs/provenance.md.
+  # ELFBuilder binary, FirmRCA unpacks generateDataset.py.  The rebuild packages both now
+  # (generateDataset.py is a tracked module resource; the ELFBuilder binary ships in
+  # framework/dockerfile_needed/ and is staged where the Jar task looks for it), so a tree without
+  # prebuilt-modules/ — every clean clone — installs JARs that can actually run.  The reference
+  # JARs are only preferred when they are present, e.g. on the reference machine or for a
+  # byte-comparison against the published build.  See docs/provenance.md.
   for m in amod-ConvertFirmToELF-1.2.jar amod-FirmRCA-1.0.jar; do
     ref="/opt/rehosting/framework/prebuilt-modules/$m"
     if [ -f "$ref" ]; then

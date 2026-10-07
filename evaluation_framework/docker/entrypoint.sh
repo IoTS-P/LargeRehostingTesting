@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # Container entrypoint — akiba 3.1.2 all-in-one image
 #
-# Behaviour intentionally mirroring the reference container on REFERENCE-HOST:
+# Behaviour intentionally mirroring the reference container of the authors' deployment:
 #   1. first start: start postgres, create the local cluster, create the
 #      `akiba-instance` instance (user akiba / password akiba), touch the init flag
 #   2. then exec the db daemon (or whatever command docker-compose passes)

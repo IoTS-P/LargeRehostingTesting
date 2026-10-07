@@ -3,7 +3,7 @@ services:
     container_name: akiba_for_artifacts
     image: akiba_for_artifacts:${VERSION:-3.1.2}
     ports:
-      - "0.0.0.0:31779:22"
+      - "0.0.0.0:41778:22"
       - "0.0.0.0:41777:31777"
     build: .
     entrypoint: ["/bin/bash", "/home/akiba/binaries/entrypoint.sh"]

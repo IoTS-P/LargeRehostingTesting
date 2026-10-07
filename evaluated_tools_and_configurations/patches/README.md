@@ -1,7 +1,7 @@
 # Patches — what has to be changed in the tools
 
-Everything here was captured from the working copies inside the container on
-`REFERENCE-HOST` (`/data/tools/<tool>`), where the pipeline was developed and
+Everything here was captured from the working copies inside the container of the
+authors' reference deployment (`/data/tools/<tool>`), where the pipeline was developed and
 evaluated. Those copies are *not* pristine upstream checkouts: they carry small
 fixes that make the tools run on this stack (Ubuntu 24.04, python 3.10/3.11,
 newer setuptools/capstone, no direct internet access at run time, …).

@@ -2,7 +2,7 @@
 # LargeRehostingTesting — all-in-one rehosting pipeline image (akiba 3.1.2)
 #
 # Mirrors the container this pipeline was developed and evaluated in:
-#   REFERENCE-HOST, image akiba_allinone:3.1.2, user `akiba`, home /home/akiba,
+#   the authors' reference deployment, image akiba_allinone:3.1.2, user `akiba`, home /home/akiba,
 #   db daemon on 31777, akiba instance on port 31777 / postgres 5432, ssh on 22.
 #
 # IMPORTANT — why the version is pinned:
@@ -130,6 +130,14 @@ COPY evaluation_framework/scripts/build_akiba_modules.py /build/build_akiba_modu
 # IoTGeneralStructures, ProgramInitialization, ...) instead of the real cause.  Stage the
 # JAR into that directory before the batches run; the tracked copy under dockerfile_needed/
 # is the fallback for a tree where the subproject build did not produce one.
+#
+# Third input, same category: ConvertFirmToELF unpacks a compiled helper out of its own JAR
+# (ConvertFirmToELF.kt: extractFileInJar("ELFBuilder/cmake-build-debug/ELFBuilder", "/tmp/ELFBuilder"))
+# and the Jar task takes that file from build/resources/ConvertFirmToELF/ELFBuilder/cmake-build-debug/
+# ELFBuilder, i.e. from framework/build/, which is git-ignored.  A tree that was never built with
+# the C++ helper produces a JAR without it and the module dies at runtime inside extractFileInJar,
+# which ProcedureManager reports only as "latter tasks skipped".  The compiled, statically linked
+# binary ships in dockerfile_needed/, so put it where the Jar task looks for it.
 RUN set -eux; cd /build/framework; chmod +x gradlew; \
     GRADLE=/opt/gradle-8.8/bin/gradle; \
     $GRADLE --no-daemon --console=plain ":akiba_framework:distZip" ":akiba_db_daemon:distZip" ":akiba_mod_utils:moduleJar-AkibaUtils"; \
@@ -137,6 +145,9 @@ RUN set -eux; cd /build/framework; chmod +x gradlew; \
     cp subprojects/akiba_mod_utils/build/libs/amod-AkibaUtils-*.jar subprojects/akiba_modules/modules/ \
         || cp dockerfile_needed/amod-AkibaUtils-1.0.jar subprojects/akiba_modules/modules/; \
     ls -l subprojects/akiba_modules/modules; \
+    mkdir -p build/resources/ConvertFirmToELF/ELFBuilder/cmake-build-debug; \
+    cp dockerfile_needed/ELFBuilder build/resources/ConvertFirmToELF/ELFBuilder/cmake-build-debug/ELFBuilder; \
+    chmod +x build/resources/ConvertFirmToELF/ELFBuilder/cmake-build-debug/ELFBuilder; \
     chmod +x /build/build_akiba_modules.py; \
     python3 /build/build_akiba_modules.py \
         --project /build/framework/subprojects/akiba_modules \
