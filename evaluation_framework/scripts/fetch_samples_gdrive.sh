@@ -9,8 +9,16 @@
 #   * a share link of any shape    https://drive.google.com/open?id=<id>
 #   * a bare file or folder id
 # Both "anyone with the link" and restricted shares work as long as the machine can
-# reach Google (for restricted shares, run `gdown --fuzzy <url>` once interactively to
-# cache the credentials, or use --cookies <file>).
+# reach Google (for restricted shares pass --cookies <file>, or fetch
+# ~/.cache/gdown/cookies.txt from a signed-in machine with --cookies-from-browser).
+#
+# gdown has renamed and dropped flags across major versions: --remaining-ok (gdown 4.x) and
+# --fuzzy are gone in 6.x, where --continue covers the old "skip the files that are already
+# there, resume the partial ones" behaviour.  This script therefore asks the installed gdown
+# (--help) which flags it accepts and passes only those, and prints the version it used, so
+# `pip install --upgrade gdown` cannot break the download.  Passing -O without a trailing
+# slash still means "put the folder's contents directly into DIR" in 6.x, which is what the
+# unpacking below expects.
 #
 # The download lands in evaluation_samples/ (the import root of the pipeline, mounted at
 # /data/samples in the container).  Archives (.zip/.tar/.tar.gz/.tar.xz/.7z/.rar) that
@@ -36,7 +44,7 @@ while [ $# -gt 0 ]; do
     --dest)          DEST="$2"; shift 2 ;;
     --keep-archives) KEEP_ARCHIVES=1; shift ;;
     --dry-run)       DRY_RUN=1; shift ;;
-    -h|--help)       sed -n '2,25p' "$0"; exit 0 ;;
+    -h|--help)       awk 'NR > 1 { if (/^set -/) exit; print }' "$0"; exit 0 ;;
     -*)              echo "unknown option $1" >&2; exit 2 ;;
     *)               URL="$1"; shift ;;
   esac
@@ -66,6 +74,27 @@ else
 fi
 [ -n "$GdownBin" ] || [ "$DRY_RUN" = 1 ] || { echo "!! gdown unavailable" >&2; exit 1; }
 
+# ----------------------------------------------------------------- which flags this gdown takes
+# Keep this permissive: gdown 4.x wants --remaining-ok/--fuzzy, 5.x and 6.x reject both and
+# expect --continue instead.  Ask the binary rather than assume a version number, and give a
+# dry run without gdown the set a current gdown accepts, since it is only printed.
+G_COMMON=()
+G_FOLDER=()
+G_FILE=()
+if [ -n "$GdownBin" ]; then
+    echo "==> using $("$GdownBin" --version 2>&1 | head -1)"
+    GDOWN_HELP="$("$GdownBin" --help 2>&1 || true)"
+    has_flag() { printf '%s\n' "$GDOWN_HELP" | grep -q -e "$1"; }
+    has_flag --no-cookies && G_COMMON+=(--no-cookies)
+    has_flag --continue   && G_COMMON+=(--continue)      # gdown >= 5: skip finished files, resume partial ones
+    has_flag --folder       && G_FOLDER+=(--folder)
+    has_flag --remaining-ok && G_FOLDER+=(--remaining-ok)  # gdown 4.x only; removed in 5.0
+    has_flag --fuzzy        && G_FILE+=(--fuzzy)           # gdown 4.x only; 6.x parses Drive URLs itself
+else
+    G_COMMON=(--no-cookies --continue)
+    G_FOLDER=(--folder)
+fi
+
 mkdir -p "$DEST"
 echo "==> destination: $DEST"
 
@@ -75,28 +104,32 @@ case "$URL" in
   *"/drive/folders/"*|*"/drive/u/"*"/folders/"*) is_folder_url=1 ;;
 esac
 
+if [ "$is_folder_url" = 1 ]; then
+    # folder link: gdown puts the folder's contents directly in DEST (no trailing slash)
+    CMD=("${GdownBin:-gdown}" "${G_FOLDER[@]+"${G_FOLDER[@]}"}" "${G_COMMON[@]+"${G_COMMON[@]}"}" -O "$DEST" "$URL")
+else
+    # file link or bare id
+    CMD=("${GdownBin:-gdown}" "${G_FILE[@]+"${G_FILE[@]}"}" "${G_COMMON[@]+"${G_COMMON[@]}"}" -O "$DEST/" "$URL")
+fi
+
 if [ "$DRY_RUN" = 1 ]; then
-    echo "    [dry-run] would download '$URL' into $DEST"
-    if [ "$is_folder_url" = 1 ]; then
-        echo "    [dry-run] gdown --folder --remaining-ok -O $DEST"
-    else
-        echo "    [dry-run] gdown --fuzzy -O $DEST/"
-    fi
+    echo "    [dry-run] ${CMD[*]}"
     exit 0
 fi
 
 echo "==> downloading (this can take a while for a full corpus)"
 before=$(find "$DEST" -type f ! -name 'README.md' | wc -l)
 
-if [ "$is_folder_url" = 1 ]; then
-    # folder link: gdown recreates the folder structure below DEST
-    "$GdownBin" --folder --remaining-ok --no-cookies -O "$DEST" "$URL" \
-      || { echo "!! folder download failed — for a restricted share retry with cookies:" >&2
-           echo "   gdown --folder -O $DEST --cookies <cookies.txt> '$URL'" >&2; exit 1; }
-else
-    "$GdownBin" --fuzzy --no-cookies -O "$DEST/" "$URL" \
-      || { echo "!! file download failed — if the file is large, gdown may need the confirmation token:" >&2
-           echo "   gdown --fuzzy -O $DEST/ '$URL'   (or use the folder link instead)" >&2; exit 1; }
+if ! "${CMD[@]}"; then
+    if [ "$is_folder_url" = 1 ]; then
+        echo "!! folder download failed.  A restricted share needs cookies:" >&2
+        echo "   $GdownBin ${G_FOLDER[*]+"${G_FOLDER[*]}"} --cookies <cookies.txt> -O $DEST '$URL'" >&2
+        echo "   on a flaky link also try --retries 5 (--continue, when supported, already skips finished files)" >&2
+    else
+        echo "!! file download failed — if the file is large, gdown may need the confirmation token:" >&2
+        echo "   $GdownBin ${G_FILE[*]+"${G_FILE[*]}"} -O $DEST/ '$URL'   (or use the folder link instead)" >&2
+    fi
+    exit 1
 fi
 
 # ----------------------------------------------------------------- unpack
