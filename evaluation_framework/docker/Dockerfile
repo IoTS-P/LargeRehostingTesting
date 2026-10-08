@@ -116,6 +116,11 @@ RUN set -eux; cd /build/framework; \
     done
 
 COPY evaluation_framework/scripts/build_akiba_modules.py /build/build_akiba_modules.py
+COPY evaluation_framework/scripts/check_framework_bundle.py /build/check_framework_bundle.py
+# The pipeline configs are the definition of "complete": every module class they name must be in
+# modules/, so the build verifies it instead of leaving it to the first stage that runs (see the
+# script's docstring for the failure it prevents).
+COPY evaluation_framework/pipeline_configs /build/pipeline_configs
 # The module build resolves inter-module dependencies to build/libs/amod-*.jar while
 # creating each task, so it cannot build a clean tree in one Gradle invocation:
 # scripts/build_akiba_modules.py parses the dependency graph out of build.gradle.kts and
@@ -154,7 +159,11 @@ RUN set -eux; cd /build/framework; mkdir -p /out; \
     cp /build/framework/lib/ghidra.jar /out/akiba_framework/lib/ghidra.jar; \
     chmod +x /out/akiba_framework/bin/* /out/akiba_db_daemon/bin/*; \
     echo "modules built: $(ls /out/akiba_framework/modules | wc -l)"; \
-    ls /out/akiba_framework/modules | head
+    ls /out/akiba_framework/modules | head; \
+    python3 /build/check_framework_bundle.py \
+        --framework /out/akiba_framework \
+        --pipelines /build/pipeline_configs \
+        --manifest /out/framework_manifest.txt
 
 # ---------------------------------------------------------------------------
 # Stage 3 — runtime image
@@ -285,6 +294,10 @@ COPY --from=radare2 /usr/local/ /usr/local/
 
 # --- akiba framework / db daemon / modules built in stage 2
 COPY --from=akiba-build /out/akiba_framework /home/akiba/akiba_framework
+# Deliberately outside /home/akiba: that path is a named volume at runtime, and this manifest is the
+# image's own record of which module jars it ships, so the entrypoint can tell a stale volume apart
+# from the image it was supposed to be seeded from.
+COPY --from=akiba-build /out/framework_manifest.txt /opt/rehosting/framework_manifest.txt
 COPY --from=akiba-build /out/akiba_db_daemon /home/akiba/akiba_db_daemon
 
 # The entrypoint deliberately does NOT live under /home/akiba: that path is a named volume at

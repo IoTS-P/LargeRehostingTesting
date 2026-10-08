@@ -358,6 +358,28 @@ docker run --rm -u root -v largerehosting_akiba_home:/h --entrypoint /bin/bash a
 The recursive repair is safe there: everything under `/home/akiba` belongs to `akiba` (the postgres
 data directory lives in its own volume, `/var/lib/postgresql`).
 
+A second, quieter form of the same problem: docker seeds a named volume from the image **only when the
+volume is empty**, so an `akiba_home` volume from an earlier build keeps that build's framework even
+after the image is rebuilt.  The framework discovers its modules by scanning `modules/` relative to its
+working directory (`run_pipeline.sh` runs `./bin/akiba_framework` after `cd /home/akiba/akiba_framework`),
+so a volume whose `modules/` is empty or old makes every stage fail — after a healthy-looking start —
+with `ClassNotFoundException: Module not found: org.iotsplab.akiba.process.<Name>` at
+`ProcedureArgumentsDeserializer.addJar(configs.kt:185)`, which names neither the jar nor the build step:
+
+```bash
+# how many module jars does the volume hold?  a current build ships ~39
+docker exec akiba_for_artifacts bash -lc 'ls /home/akiba/akiba_framework/modules | wc -l'
+# if that is low, recreate the volume (results and the database live in other volumes):
+docker compose -f evaluation_framework/docker/docker-compose.yml down
+docker volume rm largerehosting_akiba_home
+evaluation_framework/scripts/up.sh
+```
+
+The image build now fails instead of producing such a bundle (it checks every module class used by
+`pipeline_configs/*.json` against the jars it just built), and the entrypoint compares the volume
+against the manifest the image wrote at build time, printing this warning with the commands above when
+they disagree.
+
 Key characteristics:
 - Base: `ubuntu:24.04`
 - Runtime: JDK 21 (headless), PostgreSQL 16, pgbackrest

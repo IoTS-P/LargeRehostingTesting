@@ -83,6 +83,35 @@ fix_permissions() {
     sudo chmod -R u+rwX,go+rX /home/akiba/binaries /home/akiba/akiba_framework /home/akiba/akiba_db_daemon 2>/dev/null || true
 }
 
+# Docker seeds a named volume from the image only when the volume is EMPTY, so an akiba_home volume
+# left over from an earlier build keeps that build's /home/akiba and shadows this image.  The framework
+# finds its modules by scanning `modules/` relative to its working directory (run_pipeline.sh does
+# `cd /home/akiba/akiba_framework`), so such a volume makes every stage fail with
+#   ClassNotFoundException: Module not found: org.iotsplab.akiba.process.<Name>
+# long after startup looked healthy.  Compare the volume against the manifest this image wrote at
+# build time and say so once, with the way out, instead of letting it look like a pipeline bug.
+check_framework_bundle() {
+    local manifest=/opt/rehosting/framework_manifest.txt vol=/home/akiba/akiba_framework/modules
+    [ -r "$manifest" ] || return 0
+    [ -d "$vol" ] || return 0
+    ls "$vol" 2>/dev/null | sort > /tmp/.volume_jar_names
+    if grep -qvxF -f /tmp/.volume_jar_names "$manifest"; then
+        local expected have missing
+        expected=$(wc -l < "$manifest" | tr -d ' ')
+        have=$(wc -l < /tmp/.volume_jar_names | tr -d ' ')
+        missing=$(grep -vxF -f /tmp/.volume_jar_names "$manifest" | wc -l | tr -d ' ')
+        echo ">>> WARNING: this image ships ${expected} module jars, the akiba_home volume holds ${have}"
+        echo "    (${missing} missing).  A volume is seeded from the image only when it is empty, so a"
+        echo "    volume from an earlier build shadows this one, and stages then fail with"
+        echo "    'ClassNotFoundException: Module not found: org.iotsplab.akiba.process.*'."
+        echo "    From the host — results and the database live in other volumes, so those are kept:"
+        echo "      docker compose -f evaluation_framework/docker/docker-compose.yml down"
+        echo "      docker volume rm largerehosting_akiba_home"
+        echo "      evaluation_framework/scripts/up.sh"
+    fi
+    rm -f /tmp/.volume_jar_names
+}
+
 wait_for_service() {
     local url=$1 max_attempts=60 attempt=1
     echo ">>> Waiting for service ready: ${url}"
@@ -115,6 +144,7 @@ trap cleanup EXIT
 
 fix_permissions
 fix_ownership
+check_framework_bundle
 start_ssh
 
 if [ ! -f "$INIT_FLAG" ]; then
