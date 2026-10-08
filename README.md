@@ -138,6 +138,8 @@ evaluation_framework/scripts/fetch_samples_gdrive.sh <google-drive-url-or-id>
 
 It accepts a folder link, a file link, `open?id=…` links or a bare id, extracts archives in place, and lands everything in `evaluation_samples/`. The images are stored in the pipeline's own stripped form (see `evaluation_samples/README.md`); `restore_original.py` rebuilds the originals byte-for-byte from `offsets/` when needed.
 
+Google Drive rate-limits anonymous downloads, so a download of the whole corpus can stop part way through with `Cannot retrieve the public link of the file … or have had many accesses`; that message means the page Google returned was not a download page (quota far more often than permission). Completed files are skipped, so simply re-running continues where it stopped, and `--rounds N --delay SECONDS` retries unattended. `--cookies <file>` (a Netscape cookies.txt from a signed-in account) puts the download on that account's quota instead of the anonymous one.
+
 > **Not shipped:** the helper script that mirrored the corpus straight from the authors' reference server (`fetch_samples_from_server.sh`) is deliberately *not* part of this repository — it carried the server's address and login material. Direct server access is arranged with the authors; the public routes for the corpus are the Google Drive import above and the firmware-dataset note in `dataset_identification_and_reconstruction/`.
 
 ### A.3.6 Importing samples
