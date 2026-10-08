@@ -287,7 +287,12 @@ COPY --from=radare2 /usr/local/ /usr/local/
 COPY --from=akiba-build /out/akiba_framework /home/akiba/akiba_framework
 COPY --from=akiba-build /out/akiba_db_daemon /home/akiba/akiba_db_daemon
 
-COPY evaluation_framework/docker/entrypoint.sh /home/akiba/binaries/entrypoint.sh
+# The entrypoint deliberately does NOT live under /home/akiba: that path is a named volume at
+# runtime (akiba_home), so a container would exec whatever copy the volume happens to hold, and a
+# volume created from an image built out of a root-owned context (umask 077) holds a root:root file
+# with no read bit — `/bin/bash: /home/akiba/binaries/entrypoint.sh: Permission denied`, start-up
+# dead before anything can repair it.  /opt/rehosting is not masked by any volume.
+COPY evaluation_framework/docker/entrypoint.sh /opt/rehosting/entrypoint.sh
 COPY evaluation_framework/framework/dockerfile_needed/config_example.json   /home/akiba/binaries/config_example.json
 COPY evaluation_framework/framework/dockerfile_needed/config_run_example.json /home/akiba/binaries/config_run_example.json
 COPY evaluation_framework/framework/dockerfile_needed/import_example.json   /home/akiba/binaries/import_example.json
@@ -301,8 +306,9 @@ COPY evaluation_framework/docker/akiba_db_daemon_config.json /home/akiba/akiba_d
 COPY evaluation_framework/docker/motd.txt /etc/motd
 
 RUN set -eux; \
-    chmod +x /home/akiba/binaries/*.sh; \
-    find /home/akiba/akiba_framework /home/akiba/akiba_db_daemon -name '*.sh' -exec chmod +x {} +; \
+    chmod 0755 /opt/rehosting/entrypoint.sh /home/akiba/binaries/*.sh; \
+    chmod -R a+rX /home/akiba/binaries; \
+    find /home/akiba/akiba_framework /home/akiba/akiba_db_daemon -name '*.sh' -exec chmod 0755 {} +; \
     chown -R akiba:akiba /home/akiba; \
     mkdir -p /run/sshd; \
     sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/; s/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config; \
@@ -316,5 +322,5 @@ RUN if [ "$PROVISION_TOOLS" = "1" ]; then bash /opt/rehosting/scripts/setup_tool
 USER akiba
 WORKDIR /home/akiba/akiba_db_daemon
 EXPOSE 22 31777
-ENTRYPOINT ["/home/akiba/binaries/entrypoint.sh"]
+ENTRYPOINT ["/bin/bash", "/opt/rehosting/entrypoint.sh"]
 CMD ["./bin/akiba_db_daemon", "-c", "./resources/config.json"]

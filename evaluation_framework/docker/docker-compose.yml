@@ -52,7 +52,7 @@ services:
     # forever (nothing reaps them), and the framework's orphan-swipe helper then loops on
     # them (it cannot kill a zombie) — an init that reaps keeps the stage from hanging.
     init: true
-    entrypoint: ["/bin/bash", "/home/akiba/binaries/entrypoint.sh"]
+    entrypoint: ["/bin/bash", "/opt/rehosting/entrypoint.sh"]
     command: ["/bin/bash", "./bin/akiba_db_daemon", "-c", "./resources/config.json"]
     working_dir: /home/akiba/akiba_db_daemon
     restart: unless-stopped

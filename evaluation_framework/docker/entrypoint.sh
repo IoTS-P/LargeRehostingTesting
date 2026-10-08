@@ -58,16 +58,21 @@ start_ssh() {
 }
 
 # The daemon and this script exec files straight from disk (./resources/initialize_pg_local.sh,
-# ./bin/akiba_db_daemon, ./resources/initialize_pg_instance.sh from PGInstances.kt), so they need
-# the executable bit.  /home/akiba is a named volume: it can hold a copy that came from an image,
-# a tarball or a checkout created on a filesystem that cannot store that bit (NTFS/exFAT report
-# everything as 777; git then records every script as non-executable), and the container would
-# start, fail on `./bin/akiba_db_daemon: Permission denied` and never answer on 31777.  Cheap to
-# repair on every start, so repair here instead of relying on how the tree was transferred.
+# ./bin/akiba_db_daemon, ./resources/initialize_pg_instance.sh from PGInstances.kt).  /home/akiba is
+# a named volume: it can hold a copy that came from an image, a tarball or a checkout created on a
+# filesystem that cannot store the executable bit (NTFS/exFAT report everything as 777; git then
+# records every script as non-executable), and the container would start, fail on
+# `./bin/akiba_db_daemon: Permission denied` and never answer on 31777.  Cheap to repair on every
+# start, so repair here instead of relying on how the tree was transferred.  Note this repairs
+# *modes for the current owner*: a file owned by root still needs sudo, which akiba has.  The
+# entrypoint itself lives in /opt/rehosting (outside every volume) precisely so that an unreadable
+# copy of it cannot prevent this repair from running at all.
 fix_permissions() {
-    sudo chmod +x /home/akiba/binaries/*.sh 2>/dev/null || true
+    sudo chmod 0755 /home/akiba/binaries/*.sh 2>/dev/null || true
+    sudo chmod -R a+rX /home/akiba/binaries 2>/dev/null || true
+    sudo chmod 0755 /opt/rehosting/entrypoint.sh /opt/rehosting/scripts/*.sh /opt/rehosting/scripts/*.py 2>/dev/null || true
     sudo find /home/akiba/akiba_framework /home/akiba/akiba_db_daemon \
-        \( -name '*.sh' -o -path '*/bin/*' -o -path '*/bin' \) -exec chmod +x {} + 2>/dev/null || true
+        \( -name '*.sh' -o -path '*/bin/*' -o -path '*/bin' \) -exec chmod 0755 {} + 2>/dev/null || true
 }
 
 wait_for_service() {

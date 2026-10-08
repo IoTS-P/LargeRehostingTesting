@@ -331,6 +331,27 @@ directly executable itself (`akiba_db_daemon/bin/*`, `resources/*.sh`, `binaries
 container entrypoint re-checks them on every start, so a mode-stripped volume or archive cannot
 leave the daemon unable to start.
 
+The container has one related failure that a rebuild does not fix by itself, because `up.sh` only
+reports it from the logs:
+
+```
+akiba_for_artifacts  | /bin/bash: /home/akiba/binaries/entrypoint.sh: Permission denied
+database daemon did not become ready in time
+```
+
+`/home/akiba` is the `akiba_home` named volume, so at runtime the entrypoint is the copy *inside that
+volume*, not the one in the image — and a volume that was initialised from an image built out of a
+root-owned checkout (`umask 077` leaves scripts at `600`; `COPY` preserves that, and `chmod +x` then
+turns it into `-rwx--x--x root root`, execute-only for everyone else) holds a file the container user
+`akiba` may execute but not read.  A new image no longer has this problem (the entrypoint lives in
+`/opt/rehosting/`, which no volume masks), and an old one can be repaired in place:
+
+```bash
+# print the offending modes, then make the volume readable/executable again
+docker run --rm -u root -v largerehosting_akiba_home:/h --entrypoint /bin/bash akiba_for_artifacts:3.1.2 \
+  -c 'ls -l /h/binaries/entrypoint.sh; chown -R akiba:akiba /h; chmod 0755 /h/binaries/*.sh; chmod -R a+rX /h/binaries'
+```
+
 Key characteristics:
 - Base: `ubuntu:24.04`
 - Runtime: JDK 21 (headless), PostgreSQL 16, pgbackrest
