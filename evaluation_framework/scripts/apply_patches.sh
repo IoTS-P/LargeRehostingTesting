@@ -42,6 +42,22 @@ NESTED_PATCHES=(
 
 applied()  { git -C "$1" apply --reverse --check "$2" >/dev/null 2>&1; }
 appliable() { git -C "$1" apply --check "$2" >/dev/null 2>&1; }
+# `git diff` records a file *mode* in the index line, so `git apply` also warns about whitespace
+# errors at EOF ("new blank line at EOF"), which says nothing about whether the patch landed and
+# makes applied/failed hard to tell apart.  Every apply below passes --whitespace=nowarn for that.
+apply_quiet() { git -C "$1" apply --whitespace=nowarn "$2"; }
+# A submodule whose `.git` file points at the superproject (a checkout that went wrong) resolves,
+# so the initialised-check passes, but every `git apply` then runs against the *superproject* — the
+# patch can never apply and the failure reads like a bad patch.  Name it instead.
+gitdir_escaped() { # <submodule dir>: 0 when its git dir is not this repo's own modules dir for it
+  local gd
+  gd=$(git -C "$REPO_ROOT/$1" rev-parse --absolute-git-dir 2>/dev/null) || return 1
+  case "$gd" in "$REPO_ROOT/.git/modules/"*) return 1 ;; *) return 0 ;; esac
+}
+# Why a git-apply patch did not apply: the first few lines git itself prints, not just "does NOT apply".
+why_not_applies() { # <submodule dir> <patch>
+  git -C "$REPO_ROOT/$1" apply --check -v "$2" 2>&1 | head -4 | sed 's/^/      /'
+}
 
 # A patch stops being applicable in either direction once another overlay has rewritten
 # the same lines — fuzzware.pipeline.patch and the admission-fuzzware diffs both touch
@@ -91,6 +107,11 @@ for entry in "${PATCHES[@]}"; do
     c_blue "not initialised: $dir — run 'git submodule update --init' first"
     continue
   }
+  if gitdir_escaped "$dir"; then
+    c_red "wrong git dir   : $dir — its .git points at the superproject, so no patch can apply"
+    echo "      fix: evaluation_framework/scripts/setup.sh --with-nested"
+    rc=1; continue
+  fi
   if applied "$REPO_ROOT/$dir" "$REPO_ROOT/$patch"; then
     c_green "already applied : $patch"
     [ "$MODE" = apply ] && fix_modes "$dir" "$REPO_ROOT/$patch"
@@ -103,19 +124,23 @@ for entry in "${PATCHES[@]}"; do
              c_green "applied         : $patch (content matches; a later overlay re-touched these lines)"
            else
              c_red "does NOT apply  : $patch (submodule dirty or wrong commit?)"; rc=1
+             echo "      at $(git -C "$REPO_ROOT/$dir" rev-parse --short HEAD), git says:"
+             why_not_applies "$dir" "$REPO_ROOT/$patch"
            fi ;;
     apply) if appliable "$REPO_ROOT/$dir" "$REPO_ROOT/$patch"; then
-             git -C "$REPO_ROOT/$dir" apply "$REPO_ROOT/$patch" \
+             apply_quiet "$REPO_ROOT/$dir" "$REPO_ROOT/$patch" \
                && { c_green "applied         : $patch"; fix_modes "$dir" "$REPO_ROOT/$patch"; } \
-               || { c_red "apply failed    : $patch"; rc=1; }
+               || { c_red "apply failed    : $patch"; why_not_applies "$dir" "$REPO_ROOT/$patch"; rc=1; }
            elif postimage_present "$dir" "$REPO_ROOT/$patch"; then
              c_green "applied         : $patch (content matches; a later overlay re-touched these lines)"
              fix_modes "$dir" "$REPO_ROOT/$patch"
            else
              c_red "does NOT apply  : $patch"; rc=1
+             echo "      at $(git -C "$REPO_ROOT/$dir" rev-parse --short HEAD), git says:"
+             why_not_applies "$dir" "$REPO_ROOT/$patch"
            fi ;;
     revert) if applied "$REPO_ROOT/$dir" "$REPO_ROOT/$patch"; then
-              git -C "$REPO_ROOT/$dir" apply --reverse "$REPO_ROOT/$patch" \
+              git -C "$REPO_ROOT/$dir" apply --reverse --whitespace=nowarn "$REPO_ROOT/$patch" \
                 && c_green "reverted        : $patch" \
                 || { c_red "revert failed   : $patch"; rc=1; }
             else
@@ -131,15 +156,20 @@ for entry in "${NESTED_PATCHES[@]}"; do
     c_blue "skipped (submodule not initialised): $patch — run scripts/setup.sh --with-nested"
     continue
   fi
+  if gitdir_escaped "$dir"; then
+    c_red "wrong git dir   : $dir — its .git points at the superproject, so no patch can apply"
+    echo "      fix: evaluation_framework/scripts/setup.sh --with-nested"
+    rc=1; continue
+  fi
   if applied "$REPO_ROOT/$dir" "$REPO_ROOT/$patch"; then
     c_green "already applied : $patch"
     [ "$MODE" = apply ] && fix_modes "$dir" "$REPO_ROOT/$patch"
   elif appliable "$REPO_ROOT/$dir" "$REPO_ROOT/$patch"; then
     case "$MODE" in
       check)  c_blue "not applied     : $patch" ;;
-      apply)  git -C "$REPO_ROOT/$dir" apply "$REPO_ROOT/$patch" \
+      apply)  apply_quiet "$REPO_ROOT/$dir" "$REPO_ROOT/$patch" \
                 && { c_green "applied         : $patch"; fix_modes "$dir" "$REPO_ROOT/$patch"; } \
-                || { c_red "apply failed: $patch"; rc=1; } ;;
+                || { c_red "apply failed: $patch"; why_not_applies "$dir" "$REPO_ROOT/$patch"; rc=1; } ;;
       revert) : ;;
     esac
   else
@@ -148,6 +178,8 @@ for entry in "${NESTED_PATCHES[@]}"; do
       [ "$MODE" = apply ] && fix_modes "$dir" "$REPO_ROOT/$patch"
     else
       c_red "does NOT apply  : $patch"; rc=1
+      echo "      at $(git -C "$REPO_ROOT/$dir" rev-parse --short HEAD), git says:"
+      why_not_applies "$dir" "$REPO_ROOT/$patch"
     fi
   fi
 done
