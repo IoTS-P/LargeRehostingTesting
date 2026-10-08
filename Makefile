@@ -49,6 +49,13 @@ check: ## validate scripts, configs and patch applicability
 	@for f in evaluation_framework/scripts/*.sh evaluation_framework/docker/entrypoint.sh; do bash -n $$f || exit 1; done; echo "shell syntax ok"
 	@for f in evaluation_framework/pipeline_configs/*.json evaluation_framework/docker/*.json; do python3 -c "import json,sys;json.load(open('$$f'))" || exit 1; done; echo "json ok"
 	@evaluation_framework/scripts/apply_patches.sh --check
+	@# A patch is a byte-level artefact: if git normalises its line endings on the way into the index,
+	@# `git apply` stops matching the file it patches, and because git apply is all-or-nothing the whole
+	@# overlay (mode entries included) is rejected.  Assert the attribute that keeps them verbatim.
+	@for p in evaluated_tools_and_configurations/patches/*.patch; do \
+	  a=$$(git check-attr text -- "$$p" | awk '{print $$NF}'); \
+	  [ "$$a" = "unset" ] || { echo "patch is EOL-normalised (needs -text in .gitattributes): $$p"; exit 1; }; \
+	done; echo "patch line endings ok"
 	@# A script that calls a helper nobody committed works here and fails in a fresh clone (the
 	@# container bind-mounts are the working tree, so the helper is present locally either way).
 	@missing=""; for b in $$(git grep -ohE '(evaluation_framework/scripts|/opt/rehosting/scripts)/[A-Za-z0-9_][A-Za-z0-9_.-]*\.(sh|py)' -- \

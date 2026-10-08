@@ -46,13 +46,25 @@ appliable() { git -C "$1" apply --check "$2" >/dev/null 2>&1; }
 # errors at EOF ("new blank line at EOF"), which says nothing about whether the patch landed and
 # makes applied/failed hard to tell apart.  Every apply below passes --whitespace=nowarn for that.
 apply_quiet() { git -C "$1" apply --whitespace=nowarn "$2"; }
-# A submodule whose `.git` file points at the superproject (a checkout that went wrong) resolves,
-# so the initialised-check passes, but every `git apply` then runs against the *superproject* — the
-# patch can never apply and the failure reads like a bad patch.  Name it instead.
-gitdir_escaped() { # <submodule dir>: 0 when its git dir is not this repo's own modules dir for it
+# A submodule whose `.git` file points outside this checkout (the container bind-mounts the tool at a
+# different depth than the repository keeps it, so the pointer resolves to a path that does not exist)
+# still passes the initialised-check, but every `git apply` then runs against something else and the
+# failure reads like a bad patch.  Name it instead.  Two layouts are legitimate and must not be flagged:
+# `<repo>/.git/modules/...` (the submodule layout) and a checkout carrying its own `.git` (a standalone
+# clone).
+gitdir_escaped() { # <submodule dir>: 0 when its git dir cannot serve this checkout
   local gd
-  gd=$(git -C "$REPO_ROOT/$1" rev-parse --absolute-git-dir 2>/dev/null) || return 1
-  case "$gd" in "$REPO_ROOT/.git/modules/"*) return 1 ;; *) return 0 ;; esac
+  # No git dir to resolve at all: the `.git` points at a path that does not exist (in the container the
+  # tool is bind-mounted at a different depth than the repository keeps it, which is exactly how
+  # `fatal: not a git repository: /data/tools/FirmRCA/../../../.git/modules/...` arises).  Everything
+  # below would then run against something else.
+  gd=$(git -C "$REPO_ROOT/$1" rev-parse --absolute-git-dir 2>/dev/null) || return 0
+  [ -d "$gd" ] || return 0
+  case "$gd" in
+    "$REPO_ROOT/.git/modules/"*) return 1 ;;
+    "$REPO_ROOT/$1"*)            return 1 ;;
+    *)                           return 0 ;;
+  esac
 }
 # Why a git-apply patch did not apply: the first few lines git itself prints, not just "does NOT apply".
 why_not_applies() { # <submodule dir> <patch>

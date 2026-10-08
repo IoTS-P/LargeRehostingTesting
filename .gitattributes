@@ -3,5 +3,11 @@
 # can still see textual changes.
 evaluated_tools_and_configurations/tools/uEmu-test/** -text
 
+# The overlays are byte-level artefacts too.  firmrca.patch carries CRLF pre-images for the two
+# generated files in the checkout it patches; with core.autocrlf=input git rewrites them to LF on the
+# way into the index, and the committed patch then no longer matches the file it patches — the overlay
+# is rejected as a whole, mode entries included.  Never normalise a patch.
+evaluated_tools_and_configurations/patches/*.patch -text
+
 # The compiled ConvertFirmToELF helper is a static x86-64 binary; never let git touch its bytes.
 evaluation_framework/framework/subprojects/akiba_modules/src/ConvertFirmToELF/resources/ELFBuilder/cmake-build-debug/ELFBuilder binary
