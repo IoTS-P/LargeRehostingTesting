@@ -116,6 +116,25 @@ evaluation_framework/scripts/apply_patches.sh            # apply the captured ov
 evaluation_framework/scripts/build.sh                    # build akiba_for_artifacts:3.1.2 (~15 min)
 ```
 
+To rebuild everything from scratch — no layer cache, refreshed base image, and every named volume
+dropped so the container is seeded from the new image rather than from an earlier build:
+
+```bash
+evaluation_framework/scripts/down.sh --wipe              # container + ALL volumes (database included)
+evaluation_framework/scripts/build.sh --no-cache --pull   # from-scratch image
+evaluation_framework/scripts/up.sh                        # re-creates the volumes, starts PostgreSQL
+evaluation_framework/scripts/setup_tools.sh               # rebuild the tool trees (host-specific binaries)
+evaluation_framework/scripts/import_samples.sh            # re-import the sample set
+```
+
+`down.sh --wipe` is destructive by design: the database (and with it every imported sample and
+pipeline result held in it) goes away, so the import and everything derived from it has to be redone.
+The sample files (`evaluation_samples/`), the results (`evaluation_results/`) and the tool trees
+(`evaluated_tools_and_configurations/tools/`) live in the working tree, not in volumes, and are
+untouched. A rebuild of the image *alone* does not have this effect and also does not fix a stale
+volume — Docker seeds a named volume from the image only when the volume is empty, which is why
+`--wipe` is the reliable way back to a known state.
+
 ### A.3.4 Starting the container
 
 ```bash
