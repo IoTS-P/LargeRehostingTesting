@@ -364,11 +364,19 @@ provision_firmrca() {
   #    bin_PROGRAMS list of src/src/Makefile.am builds; there is no `pomp`/`firmrca`
   #    binary in this version, so reversenolog is the marker.
   if [ ! -x "$root/src/src/reversenolog" ]; then
-    # `all-am` in src/Makefile.am lists a `README` that the checkout does not ship, so
-    # make stops with "No rule to make target 'README', needed by 'all-am'"
+    # The overlay that records this checkout's modes (patches/firmrca.patch) marks these five scripts
+    # 100755.  With the overlay unapplied they are still 644 and `./autogen.sh` dies with
+    # "Permission denied" — a mode problem, not the line-ending one the old message blamed.  Set them
+    # here: the build needs them either way, and this is exactly the set the patch encodes.
+    for f in src/autogen.sh pomp/autogen.sh pompplusplus/autogen.sh \
+             fuzzware-emulator/get_afl.sh fuzzware-emulator/unicorn/build_unicorn.sh; do
+      [ -f "$root/$f" ] && [ ! -x "$root/$f" ] && chmod +x "$root/$f"
+    done
+    # `all-am` in src/Makefile.am lists a `README` that the checkout does not ship, so make stops with
+    # "No rule to make target 'README', needed by 'all-am'"
     [ -f "$root/src/README" ] || touch "$root/src/README"
     run_logged firmrca bash -c "cd '$root/src' && ./autogen.sh && ./configure && make" \
-      || c_red "    FirmRCA build failed — see FirmRCA README step 4 (autogen/configure need LF endings)"
+      || c_red "    FirmRCA build failed — see $SETUP_LOG_DIR/setup_firmrca.log (autogen/configure/make)"
   fi
   [ -x "$root/src/src/reversenolog" ] || { c_red "    $root/src/src/reversenolog missing after the build"; return 1; }
   c_green "firmrca: provisioned (verify with: scripts/status.sh)"
@@ -609,7 +617,8 @@ provision_uemu_test() {
         c_green "    applied uEmu-source-changes.patch (shared-memory key offset; rebuild AFL for it to take effect)"
       fi
     else
-      c_yellow "    uEmu-source-changes.patch did not apply cleanly - check the µEmu snapshot's version"
+      c_yellow "    uEmu-source-changes.patch did not apply: it patches AFL/afl-fuzz.c, which exists only"
+      c_yellow "    after an S2E build of µEmu (a step that cannot run on this host).  Not needed here."
     fi
   fi
 
