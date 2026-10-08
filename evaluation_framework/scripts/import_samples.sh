@@ -18,8 +18,25 @@ if ! in_container; then
   exec docker exec -i "$CONTAINER" bash -lc "bash /opt/rehosting/scripts/import_samples.sh ${LIST_ONLY:+--list}"
 fi
 
-mkdir -p "$RESULTS_DIR/logs" "$RESULTS_DIR/generated"
+mkdir -p "$RESULTS_DIR/logs" "$RESULTS_DIR/generated" 2>/dev/null || true
 GEN="$RESULTS_DIR/generated/import_list.json"
+
+# The results mount is the host's evaluation_results/.  A root-owned directory or file in it (an earlier
+# root-context run) blocks the write below, which would otherwise surface as a python traceback ending in
+#   PermissionError: [Errno 13] Permission denied: '/data/results/generated/import_list.json'
+# Say what is wrong and what fixes it.  Probe the directory by creating a file *in* it (appending to a
+# directory is not a test) and the list separately, because a writable directory can still hold a file
+# this user cannot truncate.
+probe_failed=""
+touch "$RESULTS_DIR/generated/.write-probe" 2>/dev/null || probe_failed="$RESULTS_DIR/generated"
+[ -z "$probe_failed" ] && { : >>"$GEN" 2>/dev/null || probe_failed="$GEN"; }
+rm -f "$RESULTS_DIR/generated/.write-probe"
+if [ -n "$probe_failed" ]; then
+  c_red "cannot write $probe_failed — the results mount is not writable by $(id -un) (uid $(id -u))"
+  c_red "  restart the container: it repairs the results tree on startup (entrypoint: fix_results_dir)"
+  c_red "  or, on the host:   sudo chown -R $(id -u):$(id -g) evaluation_results/generated"
+  exit 1
+fi
 
 python3 - "$SAMPLES_DIR" "$GEN" <<'PY'
 import json, pathlib, sys

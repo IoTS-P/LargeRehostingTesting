@@ -83,6 +83,29 @@ fix_permissions() {
     sudo chmod -R u+rwX,go+rX /home/akiba/binaries /home/akiba/akiba_framework /home/akiba/akiba_db_daemon 2>/dev/null || true
 }
 
+# /data/results is a bind mount of the host's evaluation_results/, and a file or directory in it can be
+# root-owned - written by an earlier root-context step, or by an image build.  Every write from inside the
+# container then fails, and the first casualty is the import list: the pipeline's own scripts die with a
+# bare
+#   PermissionError: [Errno 13] Permission denied: '/data/results/generated/import_list.json'
+# which says nothing about ownership.  Hand the framework's own directories to the container user.
+# Probe as akiba, not as root: root can write anywhere, so a naive check never fires.  Only the
+# directories the framework writes are examined and only at depth one, so a clean multi-gigabyte results
+# tree is not walked on every start.
+fix_results_dir() {
+    local d
+    for d in /data/results /data/results/generated /data/results/logs /data/results/db /data/results/artifacts; do
+        [ -d "$d" ] || continue
+        if sudo -u akiba test -w "$d" 2>/dev/null \
+           && [ -z "$(sudo -u akiba find "$d" -maxdepth 1 \( -type f -o -type d \) ! -writable -print -quit 2>/dev/null)" ]; then
+            continue
+        fi
+        echo ">>> repairing $d (not writable by akiba)"
+        sudo chown -R akiba:akiba "$d" 2>/dev/null || true
+        sudo chmod -R u+rwX "$d" 2>/dev/null || true
+    done
+}
+
 # Docker seeds a named volume from the image only when the volume is EMPTY, so an akiba_home volume
 # left over from an earlier build keeps that build's /home/akiba and shadows this image.  The framework
 # finds its modules by scanning `modules/` relative to its working directory (run_pipeline.sh does
@@ -144,6 +167,7 @@ trap cleanup EXIT
 
 fix_permissions
 fix_ownership
+fix_results_dir
 check_framework_bundle
 start_ssh
 

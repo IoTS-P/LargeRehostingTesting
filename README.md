@@ -192,6 +192,21 @@ that no stage reads.
 evaluation_framework/scripts/import_samples.sh           # import evaluation_samples/ into the akiba instance
 ```
 
+Run these scripts on the host: they drive the container with `docker exec`, and `import_samples.sh` re-executes
+itself inside it. `quickstart.sh` refuses to run inside the container for that reason. The one thing they need
+from the container is write access to the results mount: the import list is written to
+`/data/results/generated/` — the host's `evaluation_results/`. If a root-owned file or directory is in the way
+(an earlier run that touched it as root, or an image build), the container cannot write there and you get
+
+```
+PermissionError: [Errno 13] Permission denied: '/data/results/generated/import_list.json'
+```
+
+The scripts now detect this before touching python and say which path is blocked; the container repairs the
+tree on every start (`entrypoint.sh: fix_results_dir`, which hands `/data/results{,/generated,/logs,/db,/artifacts}`
+to the container user when it cannot write them), so restarting the container is the usual fix. On the host the
+equivalent is `sudo chown -R $(id -u):$(id -g) evaluation_results`.
+
 ### A.3.7 One-shot run
 
 ```bash

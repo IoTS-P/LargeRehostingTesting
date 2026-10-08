@@ -27,6 +27,15 @@
 set -uo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
+# quickstart drives the container from outside: it calls `docker exec` and writes host paths under
+# $REPO_ROOT.  Inside the container there is no docker and no host path, so step 5 dies on its first
+# write and step 6 cannot import anything — which reads as "quickstart does not import".  Refuse early.
+if in_container || ! command -v docker >/dev/null 2>&1; then
+  c_red "quickstart.sh runs on the host, not inside the container (it drives the container with docker exec)."
+  c_red "  inside the container, use:  scripts/import_samples.sh  (imports the samples)  and  scripts/run_pipeline.sh"
+  exit 1
+fi
+
 # ---------------------------------------------------------------- the quick-test sample selection
 # Small ids from the empirical study (md5-verified against
 # dataset_identification_and_reconstruction/binaries_md5.csv).  They cover the cases the
@@ -143,7 +152,21 @@ fi
 # ---------------------------------------------------------------- 5. import list
 step "5/7 import selection"
 GEN_DIR="$REPO_ROOT/evaluation_results/generated"
-mkdir -p "$GEN_DIR"
+mkdir -p "$GEN_DIR" 2>/dev/null || true
+# Same failure mode as import_samples.sh: a root-owned directory or list file here (an earlier root-context
+# run) turns into a python PermissionError traceback three seconds later.  Probe the directory by creating
+# a file in it, and the list separately: a writable directory can still hold a file this user cannot
+# truncate.
+probe_failed=""
+touch "$GEN_DIR/.write-probe" 2>/dev/null || probe_failed="$GEN_DIR"
+[ -z "$probe_failed" ] && { : >>"$GEN_DIR/import_list.json" 2>/dev/null || probe_failed="$GEN_DIR/import_list.json"; }
+rm -f "$GEN_DIR/.write-probe"
+if [ -n "$probe_failed" ]; then
+  c_red "cannot write $probe_failed — evaluation_results/ is not writable by $(id -un)"
+  c_red "  either restart the container (it repairs the results tree at startup), or:"
+  c_red "    sudo chown -R $(id -u):$(id -g) evaluation_results"
+  exit 1
+fi
 if [ "$FULL" = 1 ]; then
   LIST="$GEN_DIR/import_list.json"
   python3 - "$REPO_ROOT/evaluation_samples" "$LIST" <<'PY'
@@ -172,10 +195,18 @@ PY
 fi
 CONTAINER_LIST="/data/results/generated/$(basename "$LIST")"
 step "importing"
-docker exec -i "$CONTAINER" bash -lc "cd $FRAMEWORK && ./bin/akiba_framework \
-  -c /data/pipelines/00_import.json@/main -i $CONTAINER_LIST" 2>&1 | tail -3
+[ -s "$LIST" ] || { c_red "    the import list was not written: $LIST"; exit 1; }
+out=$(docker exec -i "$CONTAINER" bash -lc "cd $FRAMEWORK && ./bin/akiba_framework \
+  -c /data/pipelines/00_import.json@/main -i $CONTAINER_LIST" 2>&1); rc=$?
+printf '%s\n' "$out" | tail -3 | sed 's/^/    /'
+if [ "$rc" != 0 ]; then
+  c_red "    import failed (exit $rc) — can the container read $CONTAINER_LIST?"
+  exit 1
+fi
 bash "$(dirname "${BASH_SOURCE[0]}")/export_results.sh" >/dev/null 2>&1 || true
-printf '    binaries in database: %s\n' "$([ -f "$REPO_ROOT/evaluation_results/db/binaries.csv" ] && echo $(( $(wc -l < "$REPO_ROOT/evaluation_results/db/binaries.csv") - 1 )))"
+binaries=$([ -f "$REPO_ROOT/evaluation_results/db/binaries.csv" ] && echo $(( $(wc -l < "$REPO_ROOT/evaluation_results/db/binaries.csv") - 1 )) || echo 0)
+printf '    binaries in database: %s\n' "$binaries"
+[ "${binaries:-0}" -gt 0 ] || { c_red "    the database holds no binaries after the import — stopping here"; exit 1; }
 
 # ---------------------------------------------------------------- 6. pipeline
 step "6/7 pipeline (stages $STAGE_ORDER)"
