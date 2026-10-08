@@ -59,6 +59,23 @@ run_logged() { # name cmd...
   fi
 }
 
+# GitHub over this link stalls mid-transfer: GnuTLS ends with "recv error (-110)", an ETIMEDOUT in the
+# middle of a multi-megabyte response — which `curl -I` cannot reveal, because it fetches only headers.
+# Two things make that survivable: HTTP/1.1 for the transfer (the multiplexed HTTP/2 connection is what
+# dies first here; the same reason pushes with this remote need http.version=HTTP/1.1), and retries.
+git_net() { # git over HTTP/1.1, abandoning a stalled transfer instead of hanging on it
+  git -c http.version=HTTP/1.1 -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 "$@"
+}
+retry() { # <label> <attempts> <cmd...>
+  local label="$1" n="$2" i; shift 2
+  for i in $(seq 1 "$n"); do
+    "$@" && return 0
+    c_yellow "    $label failed (attempt $i/$n)"
+    [ "$i" = "$n" ] || sleep 10
+  done
+  return 1
+}
+
 have() { command -v "$1" >/dev/null 2>&1; }
 
 # virtualenvwrapper: fuzzware's and gdma's install_local.sh abort unless
@@ -283,13 +300,32 @@ provision_firmrca() {
       # differed only in qemu/target-arm/unicorn_arm.c (it stores the register *address* in
       # uc_reg_read, the reference stores the value), and that blob is 8cb665bf's.
       UC_URL=https://github.com/fuzzware-fuzzer/unicorn.git
+      UC_SLUG=fuzzware-fuzzer/unicorn
       UC_PIN=8cb665bf67b1f8fa04cc916b25d20732d1fbcc81
-      run_logged firmrca git clone --branch fuzzware --depth 1 "$UC_URL" "$UC" \
-        || { c_red "    could not fetch FirmRCA's unicorn fork (network?)"; return 1; }
-      run_logged firmrca git -C "$UC" fetch --depth 1 origin "$UC_PIN" \
-        && run_logged firmrca git -C "$UC" checkout --detach "$UC_PIN" \
-        || { c_red "    could not pin FirmRCA's unicorn fork to ${UC_PIN:0:8}"; return 1; }
-      c_blue "    unicorn fork at $(git -C "$UC" rev-parse HEAD)"
+      # sha1 of qemu/target-arm/unicorn_arm.c at the pin, measured on the reference checkout.  It is the
+      # one file that distinguishes the pin from the branch head (the head stores the register *address*
+      # in uc_reg_read, the pin stores the value), so it verifies the tree however it arrives.
+      UC_MARK=4271c483993a756b660df027d1697aaf8881fcbd
+      UC_TARBALL="https://codeload.github.com/$UC_SLUG/tar.gz/$UC_PIN"
+      # Fetch the single commit, not a branch: a quarter of the bytes, one round trip, and this link
+      # drops long transfers (see git_net).
+      rm -rf "$UC"; mkdir -p "$UC"
+      git -C "$UC" init -q
+      if retry "fetching the unicorn fork" 3 git_net -C "$UC" fetch --depth 1 --no-tags "$UC_URL" "$UC_PIN"; then
+        git -C "$UC" checkout -q --detach "$UC_PIN" || { c_red "    could not check out ${UC_PIN:0:8}"; return 1; }
+      else
+        # Fallback: codeload's tarball is one GET whose --retry/-C - can resume after a drop, where the
+        # git protocol cannot be picked up again mid-transfer.
+        c_yellow "    git could not transfer the fork; falling back to the tarball"
+        ( cd "$UC" && curl -fL --retry 5 --retry-delay 5 -C - -o .tree.tgz "$UC_TARBALL" ) \
+          && tar xzf "$UC/.tree.tgz" -C "$UC" --strip-components=1 \
+          && rm -f "$UC/.tree.tgz" \
+          || { c_red "    could not fetch FirmRCA's unicorn fork (git and the tarball both failed)"; return 1; }
+      fi
+      if [ "$(sha1sum "$UC/qemu/target-arm/unicorn_arm.c" 2>/dev/null | cut -d' ' -f1)" != "$UC_MARK" ]; then
+        c_red "    the tree fetched is not ${UC_PIN:0:8}: qemu/target-arm/unicorn_arm.c does not match"; return 1
+      fi
+      c_blue "    unicorn fork at $UC_PIN (verified)"
     fi
     run_logged firmrca bash -c "cd '$UC' && rm -f qemu/config-host.mak qemu/config-host.h && make -C qemu distclean clean >/dev/null 2>&1; make clean >/dev/null 2>&1; find . -name '*.o' -delete; rm -f libunicorn.so*" || true
     run_logged firmrca bash -c "cd '$UC' && UNICORN_ARCHS=arm make -j8 all" \
@@ -319,7 +355,8 @@ provision_firmrca() {
     # removing it after our install would delete the freshly installed headers
     run_logged firmrca sudo apt-get remove -y libcapstone-dev || true
     if [ ! -d "$CAPSTONE_DIR/.git" ]; then
-      run_logged firmrca git clone https://github.com/capstone-engine/capstone.git "$CAPSTONE_DIR" \
+      rm -rf "$CAPSTONE_DIR"   # a half-clone from a dropped connection is not a clone
+      retry "cloning capstone" 3 git_net clone --depth 1 https://github.com/capstone-engine/capstone.git "$CAPSTONE_DIR" \
         || { c_red "    cloning capstone failed (network?)"; return 1; }
     fi
     run_logged firmrca git -C "$CAPSTONE_DIR" reset --hard "$CAPSTONE_COMMIT" || return 1
