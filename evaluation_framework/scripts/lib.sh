@@ -15,6 +15,15 @@ SAMPLES_DIR=/data/samples
 RESULTS_DIR=/data/results
 DB_INSTANCE=akiba-instance
 
+# The architecture written into every import-list entry.  The evaluation corpus is homogeneous - all 4,571
+# firmware images are ARM:LE:32:v8T raw binaries - and without it the framework has to search: with no arch
+# it imports each binary once per candidate language (ProgramManager.GUESSED_PRIMARY_LEVEL_ARCHES, 18 of
+# them) and auto-analyzes every attempt (up to autoAnalysisTimeout each) before keeping the language that
+# yielded the most functions.  An entry that names its arch goes straight to one import with that language,
+# and the value is what the database records for the binary, so the later stages read it back rather than
+# guess again.  A wrong value is rejected loudly ("Architecture invalid: <id>").
+AKIBA_ARCH="${AKIBA_ARCH:-ARM:LE:32:v8T}"
+
 c_red()   { printf '\033[31m%s\033[0m\n' "$*"; }
 c_green() { printf '\033[32m%s\033[0m\n' "$*"; }
 c_blue()  { printf '\033[34m%s\033[0m\n' "$*"; }

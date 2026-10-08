@@ -207,6 +207,20 @@ tree on every start (`entrypoint.sh: fix_results_dir`, which hands `/data/result
 to the container user when it cannot write them), so restarting the container is the usual fix. On the host the
 equivalent is `sudo chown -R $(id -u):$(id -g) evaluation_results`.
 
+#### The architecture is stated, not searched for
+
+The corpus is homogeneous, and the import says so: every generator writes `"arch": "ARM:LE:32:v8T"` into each
+list entry (override with `AKIBA_ARCH` for a different corpus), and `00_import.json` carries the same value as
+`general.processor`. Without an arch, `ImportManager` hands the entry to
+`ProgramManager.tryCreateProgramWithoutLang`, which imports the file once per candidate language — the 18 in
+`ProgramManager.GUESSED_PRIMARY_LEVEL_ARCHES` (AArch64, ARM, MIPS, PowerPC, RISCV, x86 and Xtensa, both
+endiannesses where they exist) — auto-analyzes every attempt (up to `autoAnalysisTimeout` seconds each, 180
+here) and keeps the language that disassembled the most functions, provided one cleared the 30-function
+threshold. An entry that names its arch takes the other branch instead: a single import with that one
+language. The arch is also what the import records for the binary in the database, so the later stages read it
+back rather than searching again. A value Ghidra does not know fails at parse time with
+`Architecture invalid: <id>`, so a typo cannot silently fall back to guessing.
+
 ### A.3.7 One-shot run
 
 ```bash

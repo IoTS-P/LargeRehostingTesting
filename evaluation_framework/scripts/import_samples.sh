@@ -40,17 +40,18 @@ if [ -n "$probe_failed" ]; then
   exit 1
 fi
 
-python3 - "$SAMPLES_DIR" "$GEN" <<'PY'
+python3 - "$AKIBA_ARCH" "$SAMPLES_DIR" "$GEN" <<'PY'
 import json, pathlib, sys
 
-root = pathlib.Path(sys.argv[1])
-out = pathlib.Path(sys.argv[2])
+arch = sys.argv[1]
+root = pathlib.Path(sys.argv[2])
+out = pathlib.Path(sys.argv[3])
 files = sorted(p for p in root.rglob('*') if p.is_file()
                and not p.name.startswith('.')
                and p.suffix.lower() not in ('.md', '.txt', '.json'))
-entries = [{"path": str(p.relative_to(root))} for p in files]
+entries = [{"path": str(p.relative_to(root)), "arch": arch} for p in files]
 out.write_text(json.dumps({"entries": entries}, indent=2))
-print(f"[import] {len(entries)} firmware file(s) found under {root}")
+print(f"[import] {len(entries)} firmware file(s) found under {root} (arch {arch})")
 for e in entries[:20]:
     print("         ", e["path"])
 if len(entries) > 20:

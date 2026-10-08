@@ -169,28 +169,28 @@ if [ -n "$probe_failed" ]; then
 fi
 if [ "$FULL" = 1 ]; then
   LIST="$GEN_DIR/import_list.json"
-  python3 - "$REPO_ROOT/evaluation_samples" "$LIST" <<'PY'
+  python3 - "$AKIBA_ARCH" "$REPO_ROOT/evaluation_samples" "$LIST" <<'PY'
 import json, pathlib, sys
-root, out = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+arch, root, out = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3])
 files = sorted(p for p in root.rglob('*.bin') if p.is_file())
-out.write_text(json.dumps({"entries": [{"path": str(p.relative_to(root))} for p in files]}, indent=2) + "\n")
-print(f"    {len(files)} sample(s) selected (full corpus)")
+out.write_text(json.dumps({"entries": [{"path": str(p.relative_to(root)), "arch": arch} for p in files]}, indent=2) + "\n")
+print(f"    {len(files)} sample(s) selected (full corpus, arch {arch})")
 PY
 else
   LIST="$GEN_DIR/import_list_quick.json"
   [ -n "$SAMPLES_ARG" ] && DEFAULT_SAMPLES=($SAMPLES_ARG)
-  python3 - "$REPO_ROOT/evaluation_samples" "$LIST" "${DEFAULT_SAMPLES[@]}" <<'PY'
+  python3 - "$AKIBA_ARCH" "$REPO_ROOT/evaluation_samples" "$LIST" "${DEFAULT_SAMPLES[@]}" <<'PY'
 import json, pathlib, sys
-root, out, ids = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3:]
+arch, root, out, ids = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]), sys.argv[4:]
 entries = []
 for i in ids:
     for cand in (root / 'empirical_study_samples' / f'{i}.bin', root / 'firmware' / f'{i}.bin'):
         if cand.exists():
-            entries.append({"path": str(cand.relative_to(root))}); break
+            entries.append({"path": str(cand.relative_to(root)), "arch": arch}); break
     else:
         sys.exit(f"sample {i} not found under {root}")
 out.write_text(json.dumps({"entries": entries}, indent=2) + "\n")
-print(f"    {len(entries)} sample(s) selected: {' '.join(ids)}")
+print(f"    {len(entries)} sample(s) selected: {' '.join(ids)} (arch {arch})")
 PY
 fi
 CONTAINER_LIST="/data/results/generated/$(basename "$LIST")"
