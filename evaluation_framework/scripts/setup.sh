@@ -32,15 +32,15 @@ declare -A PINS=(
 )
 
 export GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=60
-# The tool checkouts carry Git-LFS objects we neither need nor can get: firmline tracks
-# processed-firmware.txz (2.7 GB, its own processed corpus) and cpu_rec_corpus (a symlink to
-# cpu_rec's training corpus, built from that).  Neither is used by any stage — the Firmline stage
-# runs pipeline.py against our own samples with the architecture model the checkout ships — and
-# fetching one is not merely wasteful: the object is gone from the upstream LFS store, so the smudge
-# filter aborts the checkout with
-#   Error downloading processed-firmware.txz ... Object does not exist on the server: [404]
-# and the submodule never lands.  Leaving the pointer file in place is the working state; a real
-# download is possible with `git -C <tool> lfs pull` where an object still exists.
+# The firmline checkout tracks two Git-LFS objects, and one of them cannot be fetched at all:
+# processed-firmware.txz (2.7 GB, its own processed corpus) is gone from the upstream store, so the
+# smudge filter aborts the checkout with
+#   Downloading processed-firmware.txz (2.7 GB)
+#   Error downloading object ... Object does not exist on the server: [404]
+#   fatal: processed-firmware.txz: smudge filter lfs failed
+# and the submodule never lands.  No stage reads either file (fwdb.db.txz ships firmline's result
+# database, whose schema setup_tools.sh builds itself), so the pointer files are the working state.
+# A real download is possible with `git -C <tool> lfs pull` where an object still exists.
 export GIT_LFS_SKIP_SMUDGE=1
 
 # git refuses to touch a work tree owned by another uid ("detected dubious ownership in
