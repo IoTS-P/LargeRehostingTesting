@@ -110,6 +110,15 @@ evaluation_framework/scripts/setup.sh --with-nested     # check out all submodul
 evaluation_framework/scripts/apply_patches.sh            # apply the captured overlays
 ```
 
+`setup.sh` also repairs a checkout git refuses to work in (a tree owned by another uid, a half-dead
+clone, a `.git` file that escaped into the superproject). Git-LFS objects are deliberately **not**
+fetched (`GIT_LFS_SKIP_SMUDGE=1`): firmline tracks `processed-firmware.txz` (2.7 GB) and cpu_rec's
+training corpus behind LFS, no stage reads either one, and the first object no longer exists in the
+upstream store — fetching it aborts the whole checkout with `Object does not exist on the server:
+[404]`. The LFS paths stay in the tree as pointer files, and nothing needs them: `pipeline.py` runs
+against our own samples with the architecture model the checkout ships. Where an object does still
+exist, `git -C evaluated_tools_and_configurations/tools/firmline lfs pull` fetches the real file.
+
 ### A.3.3 Building the container
 
 ```bash

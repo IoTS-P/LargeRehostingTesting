@@ -32,6 +32,16 @@ declare -A PINS=(
 )
 
 export GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=60
+# The tool checkouts carry Git-LFS objects we neither need nor can get: firmline tracks
+# processed-firmware.txz (2.7 GB, its own processed corpus) and cpu_rec_corpus (a symlink to
+# cpu_rec's training corpus, built from that).  Neither is used by any stage — the Firmline stage
+# runs pipeline.py against our own samples with the architecture model the checkout ships — and
+# fetching one is not merely wasteful: the object is gone from the upstream LFS store, so the smudge
+# filter aborts the checkout with
+#   Error downloading processed-firmware.txz ... Object does not exist on the server: [404]
+# and the submodule never lands.  Leaving the pointer file in place is the working state; a real
+# download is possible with `git -C <tool> lfs pull` where an object still exists.
+export GIT_LFS_SKIP_SMUDGE=1
 
 # git refuses to touch a work tree owned by another uid ("detected dubious ownership in
 # repository at '<path>'"), which is what a clone made as root, or a tree mounted in from the
@@ -134,6 +144,11 @@ done
 
 for path in "${!PINS[@]}"; do
   pin_submodule "$path" "${PINS[$path]}"
+  # GIT_LFS_SKIP_SMUDGE only covers this script; make the skip stick for the checkout itself, so a
+  # later `git -C <tool> checkout` does not try the 2.7 GB (or 404) LFS object again.
+  if command -v git-lfs >/dev/null 2>&1; then
+    git -C "$path" lfs install --local --skip-smudge >/dev/null 2>&1 || true
+  fi
 done
 
 SETUP_RC=0
