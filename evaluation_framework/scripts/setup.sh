@@ -33,25 +33,107 @@ declare -A PINS=(
 
 export GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=60
 
+# git refuses to touch a work tree owned by another uid ("detected dubious ownership in
+# repository at '<path>'"), which is what a clone made as root, or a tree mounted in from the
+# host, looks like.  The remedy is one config line per path and the error text names the path,
+# so trust it and retry — otherwise every submodule fails with a message that reads like a
+# network problem.
+trust_dubious() {                      # stdin: git output; exit 0 when a path was trusted
+  local out p
+  out="$(cat)"
+  p="$(printf '%s' "$out" | sed -n "s/.*dubious ownership in repository at '\([^']*\)'.*/\1/p" | head -1)"
+  [ -n "$p" ] || return 1
+  git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$p" && return 1
+  git config --global --add safe.directory "$p"
+  c_blue "trusted   $p (owned by another user; git had refused to read it)"
+  return 0
+}
+
+# Run a git command; on an ownership failure, trust the named path and run it once more.
+git_trusted() {
+  local out rc
+  out="$("$@" 2>&1)"; rc=$?
+  if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q "dubious ownership"; then
+    printf '%s' "$out" | trust_dubious >/dev/null && { out="$("$@" 2>&1)"; rc=$?; }
+  fi
+  printf '%s\n' "$out"
+  return $rc
+}
+
+# A pinned commit usually sits outside the shallow history that `git submodule update --init
+# --depth 1` fetches, and a clone that died halfway leaves a repository whose objects are
+# missing altogether ("reference is not a tree").  Fetch the pin, and if it is not in this
+# clone at all, start that one submodule over.
+pin_submodule() {
+  local path="$1" want="$2" have
+  if [ ! -e "$path/.git" ]; then
+    c_blue "pin     $path: no repository — initialising it"
+    rm -rf "$path" ".git/modules/$path"
+    git_trusted git submodule update --init --depth 1 "$path" >/dev/null 2>&1
+  fi
+  have="$(git -C "$path" rev-parse HEAD 2>/dev/null || echo none)"
+
+  # A .git that resolves to the superproject's git directory makes `git -C <path>` operate on the
+  # superproject itself: `rev-parse HEAD` then answers with its commit, and a checkout there would
+  # move its work tree.  That is a stale pointer, not a submodule — refuse, and let the pointer
+  # repair fix it (scripts/_fix_submodule_gitdirs.py, run before this loop).
+  local gd
+  gd="$(git -C "$path" rev-parse --absolute-git-dir 2>/dev/null || true)"
+  if [ -n "$gd" ] && [ "$gd" = "$(cd "${REPO_ROOT:-.}" && pwd -P)/.git" ]; then
+    c_red "pin     $path: its .git resolves to the superproject's git directory — refusing to touch it"
+    c_red "          repair: python3 evaluation_framework/scripts/_fix_submodule_gitdirs.py ."
+    return 1
+  fi
+
+  [ "$have" = "$want" ] && { c_green "ok      $path @ ${want:0:8}"; return 0; }
+
+  c_blue "pin     $path ${have:0:8} -> ${want:0:8}"
+  git_trusted git -C "$path" fetch --quiet --depth 1 origin "$want" >/dev/null 2>&1 \
+    || git_trusted git -C "$path" fetch --quiet origin >/dev/null 2>&1
+  git_trusted git -C "$path" checkout --quiet --detach "$want" >/dev/null 2>&1
+  [ "$(git -C "$path" rev-parse HEAD 2>/dev/null)" = "$want" ] \
+    && { c_green "ok      $path @ ${want:0:8}"; return 0; }
+
+  # the objects are not in this clone: re-clone just this submodule.  Anything built inside it
+  # (setup_tools.sh output, patches already applied) goes with it — say so rather than silently
+  # throwing it away.
+  c_red "pin     $path: ${want:0:8} is not in this clone — re-cloning the submodule"
+  c_red "          build output inside $path is lost; scripts/setup_tools.sh rebuilds it"
+  rm -rf "$path" ".git/modules/$path"
+  git_trusted git submodule update --init --depth 1 "$path" >/dev/null 2>&1
+  git_trusted git -C "$path" fetch --quiet --depth 1 origin "$want" >/dev/null 2>&1
+  git_trusted git -C "$path" checkout --quiet --detach "$want" >/dev/null 2>&1
+  [ "$(git -C "$path" rev-parse HEAD 2>/dev/null)" = "$want" ] \
+    && { c_green "ok      $path @ ${want:0:8} (re-cloned)"; return 0; }
+  c_red "FAILED  $path is not at ${want:0:8} (network, or the pin is gone from the remote)"
+  return 1
+}
+
 c_blue "==> fetching submodules"
-git submodule sync --quiet
-if ! git submodule update --init --depth 1 "${!PINS[@]}" 2>&1 | tail -20; then
-  c_red "git submodule update failed — check network access to github.com"
+# A tree that was copied, renamed, or checked out as another user can end up with submodule .git
+# files pointing somewhere else — including at the superproject, in which case `git -C <submodule>
+# rev-parse HEAD` answers with the *superproject's* commit and a checkout there would move the wrong
+# work tree.  Recompute those pointers first; pin_submodule below refuses any that are still wrong.
+if command -v python3 >/dev/null 2>&1; then
+  python3 "$SCRIPT_DIR/_fix_submodule_gitdirs.py" "$REPO_ROOT" 2>&1 | tail -5
+else
+  c_blue "python3 not found — skipping the submodule gitdir check"
 fi
 
+git_trusted git submodule sync --quiet >/dev/null 2>&1
+
+# One update call covers every submodule, so an ownership error on the first aborts the rest:
+# trust the paths it names and go again, retrying a couple of times for the network as well.
+for attempt in 1 2 3; do
+  out="$(git_trusted git submodule update --init --depth 1 "${!PINS[@]}" 2>&1 | tail -20)"
+  rc=$?
+  printf '%s\n' "$out"
+  [ $rc -eq 0 ] && break
+  printf '%s' "$out" | grep -q "dubious ownership" || sleep 10
+done
+
 for path in "${!PINS[@]}"; do
-  have="$(git -C "$path" rev-parse HEAD 2>/dev/null || echo none)"
-  want="${PINS[$path]}"
-  if [ "$have" = "$want" ]; then
-    c_green "ok      $path @ ${want:0:8}"
-  else
-    c_blue "pin     $path ${have:0:8} -> ${want:0:8}"
-    git -C "$path" fetch --quiet origin "$want" 2>/dev/null || true
-    git -C "$path" checkout --quiet "$want" 2>&1 | tail -2
-    [ "$(git -C "$path" rev-parse HEAD)" = "$want" ] \
-      && c_green "ok      $path @ ${want:0:8}" \
-      || c_red "FAILED  $path is not at ${want:0:8}"
-  fi
+  pin_submodule "$path" "${PINS[$path]}"
 done
 
 SETUP_RC=0
