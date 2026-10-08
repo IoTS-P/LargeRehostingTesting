@@ -196,11 +196,32 @@ fi
 CONTAINER_LIST="/data/results/generated/$(basename "$LIST")"
 step "importing"
 [ -s "$LIST" ] || { c_red "    the import list was not written: $LIST"; exit 1; }
-out=$(docker exec -i "$CONTAINER" bash -lc "cd $FRAMEWORK && ./bin/akiba_framework \
-  -c /data/pipelines/00_import.json@/main -i $CONTAINER_LIST" 2>&1); rc=$?
-printf '%s\n' "$out" | tail -3 | sed 's/^/    /'
+entries=$(python3 -c "import json;print(len(json.load(open('$LIST'))['entries']))" 2>/dev/null || echo '?')
+IMPORT_LOG="$REPO_ROOT/evaluation_results/logs/00_import.log"
+mkdir -p "$(dirname "$IMPORT_LOG")" 2>/dev/null || true
+c_blue "    ${entries} firmware file(s) -> the akiba instance (log: $IMPORT_LOG)"
+# The framework is a JVM: without a console it buffers stdout in blocks, so a long import prints nothing at
+# all until it exits, which reads as a hang.  `docker exec -t` gives it a TTY, the tee keeps the log, and
+# because a quiet framework still tells you nothing the elapsed time and the number of files stored so far
+# are printed every 20 s.  pipefail is set, so the pipeline reports the framework's status, not tee's.
+import_started=$(date +%s)
+docker exec -t "$CONTAINER" bash -lc "cd $FRAMEWORK && ./bin/akiba_framework \
+  -c /data/pipelines/00_import.json@/main -i $CONTAINER_LIST" 2>&1 | tee -a "$IMPORT_LOG" &
+import_pid=$!
+# Sleep in short slices so the exit is noticed within a couple of seconds (a single `sleep 20` would make
+# every import end with up to 20 s of dead time), while the progress line still appears about every 20 s.
+while kill -0 "$import_pid" 2>/dev/null; do
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 2
+    kill -0 "$import_pid" 2>/dev/null || break 2
+  done
+  printf '    [%4ss] stored in the instance: %s\n' "$(( $(date +%s) - import_started ))" \
+    "$(docker exec "$CONTAINER" bash -lc 'ls /data/akiba/binaries/00_import 2>/dev/null | wc -l' 2>/dev/null || echo '?')"
+done
+wait "$import_pid"; rc=$?
+printf '    import finished in %ss (exit %s)\n' "$(( $(date +%s) - import_started ))" "$rc"
 if [ "$rc" != 0 ]; then
-  c_red "    import failed (exit $rc) — can the container read $CONTAINER_LIST?"
+  c_red "    import failed (exit $rc) — can the container read $CONTAINER_LIST? (log: $IMPORT_LOG)"
   exit 1
 fi
 bash "$(dirname "${BASH_SOURCE[0]}")/export_results.sh" >/dev/null 2>&1 || true

@@ -15,7 +15,9 @@ LIST_ONLY=0
 
 if ! in_container; then
   require_container
-  exec docker exec -i "$CONTAINER" bash -lc "bash /opt/rehosting/scripts/import_samples.sh ${LIST_ONLY:+--list}"
+  # -t and not -i: the framework is a JVM, and without a console its stdout is block-buffered, so a long
+  # import prints nothing until it exits.  It reads no stdin, so the TTY is all we need.
+  exec docker exec -t "$CONTAINER" bash -lc "bash /opt/rehosting/scripts/import_samples.sh ${LIST_ONLY:+--list}"
 fi
 
 mkdir -p "$RESULTS_DIR/logs" "$RESULTS_DIR/generated" 2>/dev/null || true
@@ -59,12 +61,36 @@ if [ "$LIST_ONLY" = 1 ]; then
   exit 0
 fi
 
-if [ "$(python3 -c "import json;print(len(json.load(open('$GEN'))['entries']))")" = "0" ]; then
+entries=$(python3 -c "import json;print(len(json.load(open('$GEN'))['entries']))" 2>/dev/null || echo '?')
+if [ "${entries:-0}" = "0" ]; then
   c_red "evaluation_samples/ is empty — download the sample set first (see README)"
   exit 1
 fi
 
 cd "$FRAMEWORK"
-c_blue "==> importing (log: $RESULTS_DIR/logs/00_import.log)"
-./bin/akiba_framework -c /data/pipelines/00_import.json@/main -i "$GEN" 2>&1 | tee -a "$RESULTS_DIR/logs/00_import.log"
-c_green "import finished"
+IMPORT_LOG="$RESULTS_DIR/logs/00_import.log"
+c_blue "==> importing ${entries} firmware file(s) (log: $IMPORT_LOG)"
+# A JVM without a console buffers stdout in blocks, so a long import shows nothing until it exits, which
+# reads as a hang.  The caller gives this process a TTY (docker exec -t); the tee keeps the log; and because
+# a quiet framework still tells you nothing, the elapsed time and the number of files stored so far are
+# printed every 20 s.  pipefail is set, so the pipeline reports the framework's status rather than tee's.
+import_started=$(date +%s)
+./bin/akiba_framework -c /data/pipelines/00_import.json@/main -i "$GEN" 2>&1 | tee -a "$IMPORT_LOG" &
+import_pid=$!
+# Sleep in short slices so the exit is noticed within a couple of seconds (a single `sleep 20` would make
+# every import end with up to 20 s of dead time), while the progress line still appears about every 20 s.
+while kill -0 "$import_pid" 2>/dev/null; do
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 2
+    kill -0 "$import_pid" 2>/dev/null || break 2
+  done
+  printf '    [%4ss] stored in the instance: %s\n' "$(( $(date +%s) - import_started ))" \
+    "$(ls /data/akiba/binaries/00_import 2>/dev/null | wc -l)"
+done
+wait "$import_pid"; rc=$?
+printf '    import finished in %ss (exit %s)\n' "$(( $(date +%s) - import_started ))" "$rc"
+if [ "$rc" != 0 ]; then
+  c_red "import failed (exit $rc) — see $IMPORT_LOG"
+  exit 1
+fi
+c_green "import finished: $(ls /data/akiba/binaries/00_import 2>/dev/null | wc -l) entries stored under /data/akiba/binaries/00_import"

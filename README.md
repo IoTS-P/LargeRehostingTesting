@@ -218,6 +218,8 @@ evaluation_framework/scripts/quickstart.sh --full    # every sample, shipped 1 h
 
 The tool provisions live in named volumes (`akiba_home`, `akiba_local`, `akiba_conda`), so later runs skip them; `quickstart.sh` wipes only the pipeline state (database, Ghidra/fuzzware projects) by default, which is what makes a repeated test reproducible. Pass `--keep-state` to resume instead, `--samples 804,3349` to test other ids, or `--list-stages` to see the stage table.
 
+A long import looks silent by nature: the framework is a JVM, and when its stdout is not a console it buffers output in blocks, so a full-corpus import can print nothing at all until it exits. Both `quickstart.sh` and `import_samples.sh` therefore hand it a TTY (`docker exec -t`), stream its output to the terminal and to `evaluation_results/logs/00_import.log`, and print a line about every 20 s with the elapsed time and how many files have been stored in the instance — so a slow import is visibly a slow import rather than a hang. A non-zero status is reported as `import failed (exit N)` instead of being swallowed by the pipe to `tee`.
+
 With the default 2-minute budget the run is a smoke test rather than a measurement. The five
 images produce real tool output — FirmXRay 5 rows, Firmline 5 rows, Fuzzware 4 rows (122 s
 fuzzing each, 0.031–0.149 basic-block coverage), Hoedur 4 rows, MultiFuzz 4 rows (0.127–0.162
