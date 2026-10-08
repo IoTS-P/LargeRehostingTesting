@@ -140,6 +140,20 @@ It accepts a folder link, a file link, `open?id=…` links or a bare id, extract
 
 Google Drive rate-limits anonymous downloads, so a download of the whole corpus can stop part way through with `Cannot retrieve the public link of the file … or have had many accesses`; that message means the page Google returned was not a download page (quota far more often than permission). Completed files are skipped, so simply re-running continues where it stopped, and `--rounds N --delay SECONDS` retries unattended. `--cookies <file>` (a Netscape cookies.txt from a signed-in account) puts the download on that account's quota instead of the anonymous one.
 
+The script only fetches: it unpacks any archives it downloaded and flattens a single wrapping directory, nothing else (the import into the database is `scripts/import_samples.sh`). So a manual download is equivalent, and is the fallback when Drive keeps throttling:
+
+1. download the folder in a browser (or copy it from wherever you already have it);
+2. put its *contents* in `evaluation_samples/` — the directory at the **repository root**, next to
+   `evaluation_framework/`, which `evaluation_framework/docker/docker-compose.yml` mounts as
+   `/data/samples`; renaming a downloaded folder to `evaluation_samples/` and moving it to the
+   repository root is exactly what the script would have produced;
+3. keep the images in the stripped form they are published in (`restore_original.py` rebuilds the
+   originals and is *not* what the pipeline imports), then check with `scripts/import_samples.sh --list`.
+
+An extra wrapping level is harmless (`import_samples.sh` walks the tree recursively), but the mount
+point itself is not: `evaluation_samples/` inside `evaluation_framework/` is a different directory
+that no stage reads.
+
 > **Not shipped:** the helper script that mirrored the corpus straight from the authors' reference server (`fetch_samples_from_server.sh`) is deliberately *not* part of this repository — it carried the server's address and login material. Direct server access is arranged with the authors; the public routes for the corpus are the Google Drive import above and the firmware-dataset note in `dataset_identification_and_reconstruction/`.
 
 ### A.3.6 Importing samples

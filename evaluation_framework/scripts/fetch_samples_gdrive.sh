@@ -47,7 +47,10 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Repository root, the way lib.sh defines it for every other script: the sample set lives in
+# <repo>/evaluation_samples, which is what docker-compose mounts as /data/samples.  ($SCRIPT_DIR/..
+# would be evaluation_framework/, where no stage looks for samples.)
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 DEST="$REPO_ROOT/evaluation_samples"
 KEEP_ARCHIVES=0
