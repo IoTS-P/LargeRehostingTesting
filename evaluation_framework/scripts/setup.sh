@@ -29,6 +29,22 @@ declare -A PINS=(
   [evaluated_tools_and_configurations/tools/hoedur]=a021fd064e5d831a427a25b17975779eef05c45b
   [evaluated_tools_and_configurations/tools/MultiFuzz]=44d0cc5df781ccba0cfb805814abe60655eb3334
   [evaluated_tools_and_configurations/tools/FirmRCA]=357958d05ebe69ac95af699a0f0da96c1cd7585d
+  # p2im and uEmu are gitlinks too, and setup_tools.sh provisions both: without a pin here they are
+  # never checked out, and the empty bind mount fails deep inside provisioning (a bare
+  # "make: *** /data/tools/p2im/afl: No such file or directory", or a missing uEmu-helper.py) which
+  # reads like a broken build instead of a missing checkout.
+  [evaluated_tools_and_configurations/tools/p2im]=0e64506a371b9c66ff67ed64a3fa65fa7e197e21
+  [evaluated_tools_and_configurations/tools/uEmu]=c82fc0a36a28ab5f96001b0682adcf9783e20346
+)
+
+# Gitlinks that no script in this repository uses (no pipeline stage, no provisioner), so they are
+# deliberately not checked out.  Every other gitlink must appear in PINS: the coverage check below
+# fails the run otherwise, because a tool that everything else expects to be on disk is exactly the
+# failure that is hardest to read from the logs.
+UNFETCHED_TOOLS=(
+  evaluated_tools_and_configurations/tools/DICE-DMA-Emulation
+  evaluated_tools_and_configurations/tools/AIM-Interrupt-Modeling
+  evaluated_tools_and_configurations/tools/aidfuzzer
 )
 
 export GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=60
@@ -152,6 +168,17 @@ for path in "${!PINS[@]}"; do
 done
 
 SETUP_RC=0
+
+# Every gitlink must be accounted for: pinned (checked out below) or listed as deliberately unfetched.
+# A tool that is provisioned but never checked out is the failure that is hardest to read from the
+# logs, so refuse to pretend the setup is complete.
+while read -r _mode _sha _stage path; do
+  [ -n "${path:-}" ] || continue
+  case " ${!PINS[*]} ${UNFETCHED_TOOLS[*]} " in
+    *" $path "*) ;;
+    *) c_red "no pin for gitlink $path — add it to PINS (or UNFETCHED_TOOLS) in setup.sh"; SETUP_RC=1 ;;
+  esac
+done < <(git ls-files -s -- evaluated_tools_and_configurations/tools | awk '$1 == "160000"')
 
 if [ "$WITH_NESTED" = 1 ]; then
   c_blue "==> fetching nested submodules (this pulls radare2, binwalk, qemu patches, …)"

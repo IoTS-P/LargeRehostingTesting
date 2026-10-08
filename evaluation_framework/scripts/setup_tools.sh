@@ -13,6 +13,14 @@ set -uo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 TOOLS_ROOT=/data/tools
+# The tool directories are bind mounts of the repository's checked-out submodules, so an empty one
+# means setup.sh --with-nested was never run for that tool (or failed part-way).  What follows then
+# looks like a build error rather than a missing checkout — a bare "make: *** /data/tools/p2im/afl:
+# No such file or directory", or a missing helper script.  Name the real cause and skip the tool.
+declare -A TOOL_DIR=(
+  [firmxray]=RealworldFirmware [firmline]=firmline [fuzzware]=fuzzware [gdma]=gdma [hoedur]=hoedur
+  [multifuzz]=MultiFuzz [firmrca]=FirmRCA [p2im]=p2im [uemu]=uEmu
+)
 SETUP_LOG_DIR="$RESULTS_DIR/logs"
 
 if ! in_container; then
@@ -264,8 +272,24 @@ provision_firmrca() {
     #     host CPU may not have (AVX-512 code from a build on a newer machine SIGILLs elsewhere).
     UC="$root/fuzzware-emulator/unicorn/fuzzware-unicorn"
     if [ ! -d "$UC/qemu" ]; then
-      run_logged firmrca bash -c "cd '$root/fuzzware-emulator' && git submodule update --init --recursive unicorn/fuzzware-unicorn" \
-        || { c_red "    could not fetch FirmRCA's unicorn fork"; return 1; }
+      # FirmRCA ships neither the fork nor a usable pointer to it: fuzzware-emulator/.gitmodules names
+      # `../unicorn`, which resolves to a repository that does not exist, and fuzzware-emulator is not
+      # a checkout of its own, so `git submodule update` there has nothing to work from.  Inside the
+      # container that call cannot work at all: the tool is bind-mounted at a different depth than in
+      # the repository, so the parent `.git` pointer is unresolvable and git reports
+      #   fatal: not a git repository: /data/tools/FirmRCA/../../../.git/modules/.../FirmRCA
+      # The tree the reference used is fuzzware's own unicorn fork at 8cb665bf, identified by
+      # comparing the reference checkout with the fork's history: of 822 files, the branch head
+      # differed only in qemu/target-arm/unicorn_arm.c (it stores the register *address* in
+      # uc_reg_read, the reference stores the value), and that blob is 8cb665bf's.
+      UC_URL=https://github.com/fuzzware-fuzzer/unicorn.git
+      UC_PIN=8cb665bf67b1f8fa04cc916b25d20732d1fbcc81
+      run_logged firmrca git clone --branch fuzzware --depth 1 "$UC_URL" "$UC" \
+        || { c_red "    could not fetch FirmRCA's unicorn fork (network?)"; return 1; }
+      run_logged firmrca git -C "$UC" fetch --depth 1 origin "$UC_PIN" \
+        && run_logged firmrca git -C "$UC" checkout --detach "$UC_PIN" \
+        || { c_red "    could not pin FirmRCA's unicorn fork to ${UC_PIN:0:8}"; return 1; }
+      c_blue "    unicorn fork at $(git -C "$UC" rev-parse HEAD)"
     fi
     run_logged firmrca bash -c "cd '$UC' && rm -f qemu/config-host.mak qemu/config-host.h && make -C qemu distclean clean >/dev/null 2>&1; make clean >/dev/null 2>&1; find . -name '*.o' -delete; rm -f libunicorn.so*" || true
     run_logged firmrca bash -c "cd '$UC' && UNICORN_ARCHS=arm make -j8 all" \
@@ -601,6 +625,11 @@ provision_uemu_test() {
 # ---------------------------------------------------------------- driver
 rc=0
 for tool in "${REQUESTED[@]}"; do
+  if [ -z "$(ls -A "${TOOLS_ROOT}/${TOOL_DIR[$tool]:-}" 2>/dev/null)" ]; then
+    c_red "$tool: ${TOOLS_ROOT}/${TOOL_DIR[$tool]} is empty — check it out first with"
+    c_red "      evaluation_framework/scripts/setup.sh --with-nested   (on the host, not in the container)"
+    rc=1; continue
+  fi
   case "$tool" in
     firmxray)  provision_firmxray  || rc=1 ;;
     firmline)  provision_firmline  || rc=1 ;;
