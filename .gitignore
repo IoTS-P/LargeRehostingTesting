@@ -43,6 +43,11 @@ evaluation_framework/framework/prebuilt-modules/
 # --- host-side scratch drivers (not part of the published scripts) ------------
 evaluation_framework/scripts/_*.sh
 evaluation_framework/scripts/_*.py
+# ... except the two the published scripts call: setup.sh runs the gitdir repair, and
+# setup_tools.sh/quickstart.sh run the Firmline DB reset inside the container.  Referenced-but-
+# untracked helpers are invisible in a fresh clone, so `make check` fails on them now.
+!evaluation_framework/scripts/_fix_submodule_gitdirs.py
+!evaluation_framework/scripts/_reset_firmline_db.py
 
 # --- evaluated_tools_and_configurations/tools/<tool> -> /data/tools/<tool> ----
 # The checkouts themselves are submodules pinned to the evaluated commits; what

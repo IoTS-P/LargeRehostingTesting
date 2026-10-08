@@ -49,6 +49,13 @@ check: ## validate scripts, configs and patch applicability
 	@for f in evaluation_framework/scripts/*.sh evaluation_framework/docker/entrypoint.sh; do bash -n $$f || exit 1; done; echo "shell syntax ok"
 	@for f in evaluation_framework/pipeline_configs/*.json evaluation_framework/docker/*.json; do python3 -c "import json,sys;json.load(open('$$f'))" || exit 1; done; echo "json ok"
 	@evaluation_framework/scripts/apply_patches.sh --check
+	@# A script that calls a helper nobody committed works here and fails in a fresh clone (the
+	@# container bind-mounts are the working tree, so the helper is present locally either way).
+	@missing=""; for b in $$(git grep -ohE '(evaluation_framework/scripts|/opt/rehosting/scripts)/[A-Za-z0-9_][A-Za-z0-9_.-]*\.(sh|py)' -- \
+	    'evaluation_framework/scripts' 'evaluation_framework/docker' Makefile | sed 's|.*/||' | sort -u); do \
+	  git ls-files --error-unmatch "evaluation_framework/scripts/$$b" >/dev/null 2>&1 || missing="$$missing $$b"; \
+	done; \
+	if [ -n "$$missing" ]; then echo "referenced but NOT tracked:$$missing"; exit 1; fi; echo "script references ok"
 
 clean: ## remove pipeline outputs (keeps samples/ and the container volumes)
 	rm -rf evaluation_results/db/* evaluation_results/logs/* evaluation_results/artifacts/* evaluation_results/generated/* evaluation_results/export_manifest.txt
