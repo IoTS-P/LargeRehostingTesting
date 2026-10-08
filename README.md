@@ -340,17 +340,23 @@ database daemon did not become ready in time
 ```
 
 `/home/akiba` is the `akiba_home` named volume, so at runtime the entrypoint is the copy *inside that
-volume*, not the one in the image — and a volume that was initialised from an image built out of a
-root-owned checkout (`umask 077` leaves scripts at `600`; `COPY` preserves that, and `chmod +x` then
-turns it into `-rwx--x--x root root`, execute-only for everyone else) holds a file the container user
-`akiba` may execute but not read.  A new image no longer has this problem (the entrypoint lives in
-`/opt/rehosting/`, which no volume masks), and an old one can be repaired in place:
+volume*, not the one in the image — and a volume that was initialised from a checkout made under
+`umask 077` holds root-owned files *and directories*: `COPY` preserves `600`/`700`, `chmod +x` does not
+add read (`-rwx--x--x root root`, executable but unreadable, so `bash <script>` says
+`Permission denied`), and a `700` directory is not even traversable — the entrypoint then dies later at
+`cd /home/akiba/akiba_db_daemon: Permission denied`.  A new image no longer has the first problem (the
+entrypoint lives in `/opt/rehosting/`, which no volume masks) and the entrypoint repairs its own
+directory tree on start, but a volume that is already bad is best fixed in one go, which also works for
+an image that predates those changes:
 
 ```bash
-# print the offending modes, then make the volume readable/executable again
+# show what is wrong, then make the whole volume akiba-owned and traversable again
 docker run --rm -u root -v largerehosting_akiba_home:/h --entrypoint /bin/bash akiba_for_artifacts:3.1.2 \
-  -c 'ls -l /h/binaries/entrypoint.sh; chown -R akiba:akiba /h; chmod 0755 /h/binaries/*.sh; chmod -R a+rX /h/binaries'
+  -c 'ls -ld /h /h/binaries /h/akiba_db_daemon; chown -R akiba:akiba /h; chmod -R u+rwX,go+rX /h; echo ---; ls -ld /h /h/akiba_db_daemon'
 ```
+
+The recursive repair is safe there: everything under `/home/akiba` belongs to `akiba` (the postgres
+data directory lives in its own volume, `/var/lib/postgresql`).
 
 Key characteristics:
 - Base: `ubuntu:24.04`

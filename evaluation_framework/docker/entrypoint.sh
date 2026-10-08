@@ -73,6 +73,14 @@ fix_permissions() {
     sudo chmod 0755 /opt/rehosting/entrypoint.sh /opt/rehosting/scripts/*.sh /opt/rehosting/scripts/*.py 2>/dev/null || true
     sudo find /home/akiba/akiba_framework /home/akiba/akiba_db_daemon \
         \( -name '*.sh' -o -path '*/bin/*' -o -path '*/bin' \) -exec chmod 0755 {} + 2>/dev/null || true
+    # The same volume can also arrive with root-owned, non-traversable *directories* (a checkout or
+    # image built under umask 077), and then the container dies on the first
+    # `cd /home/akiba/akiba_db_daemon: Permission denied` — before any stage runs.  Repair the
+    # directories this script and the daemon actually need, which is bounded (the two project
+    # installs and binaries), rather than the whole home tree with its venvs and caches.
+    sudo chmod u+rwx,go+rx /home/akiba 2>/dev/null || true
+    sudo chown -R akiba:akiba /home/akiba/binaries /home/akiba/akiba_framework /home/akiba/akiba_db_daemon 2>/dev/null || true
+    sudo chmod -R u+rwX,go+rX /home/akiba/binaries /home/akiba/akiba_framework /home/akiba/akiba_db_daemon 2>/dev/null || true
 }
 
 wait_for_service() {
