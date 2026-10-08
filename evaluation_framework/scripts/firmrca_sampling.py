@@ -41,7 +41,7 @@ DEFAULT_CRASHES = REPO / "evaluation_results/db/firmxray_fuzzware_replay_crashes
 DEFAULT_OUT = REPO / "evaluation_results/db/firmrca_sampling.csv"
 DEFAULT_FIRMXRAY = REPO / "evaluation_results/db/firmxray_results.csv"
 DEFAULT_BINARIES = REPO / "evaluation_results/db/binaries.csv"
-JAR = REPO / "evaluation_framework/framework/prebuilt-modules/amod-FirmRCA-1.0.jar"
+# The module JAR this script used to read generateDataset.py from is a build product; see prepare().
 
 # Paths inside the container.
 PROJECTS = "/data/akiba/binaries/fuzzware_projects"   # per-firmware fuzzware project (pipeline/ inside)
@@ -112,13 +112,38 @@ def base_addresses() -> dict[str, str]:
 
 
 def prepare(container: str, outdir: Path) -> None:
-    """Extract the module's own generateDataset.py from the shipped jar (host side)."""
+    """Put the module's own generateDataset.py next to the run, from wherever it is available.
+
+    The copy inside the module JAR is the authoritative one (the module ships it), but the JAR is a
+    build product: it is not in a fresh clone, and the prebuilt-modules/ directory it used to come
+    from is git-ignored and no longer fetched.  So: the tracked source file first (the build packs it
+    into the JAR unchanged), then a host-side build or prebuilt JAR, then the JAR inside the image.
+    """
     outdir.mkdir(parents=True, exist_ok=True)
     target = outdir / "generateDataset.py"
     if target.exists():
         return
-    with zipfile.ZipFile(JAR) as zf:
-        target.write_bytes(zf.read("generateDataset.py"))
+    source = (REPO / "evaluation_framework/framework/subprojects/akiba_modules/src/FirmRCA"
+              / "resources/generateDataset.py")
+    if source.exists():                       # tracked, so this is the usual path
+        target.write_bytes(source.read_bytes())
+        return
+    for jar in (REPO / "evaluation_framework/framework/prebuilt-modules/amod-FirmRCA-1.0.jar",
+                REPO / "evaluation_framework/framework/subprojects/akiba_modules/build/libs"
+                / "amod-FirmRCA-1.0.jar"):
+        if jar.exists():
+            with zipfile.ZipFile(jar) as zf:
+                target.write_bytes(zf.read("generateDataset.py"))
+            return
+    # the modules are built inside the image, so the container always has one
+    proc = sh(["docker", "exec", container, "unzip", "-p",
+               "/home/akiba/akiba_framework/modules/amod-FirmRCA-1.0.jar", "generateDataset.py"])
+    if proc.returncode == 0 and proc.stdout.strip():
+        target.write_text(proc.stdout)
+        return
+    sys.exit("generateDataset.py not found: no module source, no host JAR, and 'docker exec unzip' "
+             "on the container's amod-FirmRCA-1.0.jar failed — is the container running "
+             "(scripts/up.sh) and did the image build ship the modules?")
 
 
 def binaries_index() -> dict[str, str]:
