@@ -61,7 +61,16 @@ RUN set -eux; mkdir -p /opt/ghidra-jar; cd /opt/ghidra-jar; \
     ls -la /opt/ghidra-jar
 
 # ---------------------------------------------------------------------------
-# Stage 1b — radare2, required by the Firmline module (it shells out to `r2`)
+# Stage 1b — radare2, required by the Firmline module (it shells out to `r2`, and its
+# pipeline.py checks for the name `radare2` on PATH)
+#
+# Two things this stage must get right, both learned from the reference server:
+#   * install into /opt/radare2, because the runtime container mounts a named volume over
+#     /usr/local ("akiba_local") to persist runtime builds — anything the image puts in
+#     /usr/local is masked by a stale copy of that volume, and radare2 simply disappears;
+#   * install with `configure && make install`, not `sys/install.sh`: the latter installs to
+#     /usr/local *as symlinks into the build tree* (/tmp/radare2), which the final image does
+#     not carry, so every radare2 name dangles.
 #
 # Built from upstream at a pinned tag rather than from tools/firmline/radare2:
 # that tree is only a bind mount (not part of the build context), and building it
@@ -78,9 +87,11 @@ RUN apt-get update \
 RUN set -eux; \
     git clone --depth 1 --branch "${R2_VERSION}" https://github.com/radareorg/radare2 /tmp/radare2; \
     cd /tmp/radare2; \
-    ./sys/install.sh; \
-    /usr/local/bin/r2 -v; \
-    ls -la /usr/local/lib/libr_*.so | head -3
+    ./configure --prefix=/opt/radare2; \
+    make -j"$(nproc)"; \
+    make install; \
+    /opt/radare2/bin/radare2 -v; \
+    ls -la /opt/radare2/lib/libr_*.so | head -3
 
 # ---------------------------------------------------------------------------
 # Stage 2 — build the akiba framework, database daemon and every analysis module
@@ -290,7 +301,16 @@ COPY --from=ghidra /opt/ghidra-jar/ghidra.jar /opt/ghidra-jar/ghidra.jar
 RUN chmod 644 /opt/ghidra-jar/ghidra.jar
 
 # --- radare2 (Firmline's static-analysis backend)
-COPY --from=radare2 /usr/local/ /usr/local/
+#     Deliberately not under /usr/local: the akiba_local volume is mounted there at runtime and a
+#     stale copy of it hides whatever the image has in that directory.  The loader is told where
+#     the libraries are, and the names firmline looks for land on PATH.
+COPY --from=radare2 /opt/radare2 /opt/radare2
+RUN set -eux; \
+    printf '/opt/radare2/lib\n' > /etc/ld.so.conf.d/radare2.conf; \
+    ldconfig; \
+    /opt/radare2/bin/radare2 -v; \
+    /opt/radare2/bin/rabin2 -I /bin/ls | head -3
+ENV PATH=/opt/radare2/bin:${PATH}
 
 # --- akiba framework / db daemon / modules built in stage 2
 COPY --from=akiba-build /out/akiba_framework /home/akiba/akiba_framework

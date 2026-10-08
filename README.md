@@ -410,6 +410,29 @@ The image build now fails instead of producing such a bundle (it checks every mo
 against the manifest the image wrote at build time, printing this warning with the commands above when
 they disagree.
 
+The third instance of the same trap, found while provisioning Firmline: `akiba_local` is mounted over
+`/usr/local`, which is where radare2 used to be installed, so a stale copy of that volume hid it and
+`setup_tools.sh` reported `radare2 missing from the image` — while the image did have it. That report
+was also wrong in a second way, because the install itself was broken: `sys/install.sh` installs the
+radare2 binaries as **symlinks into the build tree** (`/tmp/radare2`), which the final image does not
+carry, so every name dangled even without the volume. Both are fixed now: the image builds radare2
+with `configure --prefix=/opt/radare2 && make install` (real files), copies it to `/opt/radare2`, tells
+the loader about `/opt/radare2/lib` through `/etc/ld.so.conf.d/radare2.conf` and puts `/opt/radare2/bin`
+on `PATH` — a path no volume covers. `setup_tools.sh` checks the executable by running `radare2 -v`
+(firmline's `pipeline.py` looks that name up on `PATH`), falls back to building the vendored tree into
+the same prefix, and links `/opt/radare2/bin/{radare2,r2}` into `/usr/local/bin` when the image predates
+that layout.
+
+If you are on an image built before this and do not want to rebuild, the same one-liner repairs the
+volume's copy — the runtime installs it holds (fuzzware, bgrep, unicorn) come back from
+`setup_tools.sh`:
+
+```bash
+docker compose -f evaluation_framework/docker/docker-compose.yml down
+docker volume rm largerehosting_akiba_local   # re-created empty, then seeded from the image
+evaluation_framework/scripts/up.sh
+```
+
 Key characteristics:
 - Base: `ubuntu:24.04`
 - Runtime: JDK 21 (headless), PostgreSQL 16, pgbackrest

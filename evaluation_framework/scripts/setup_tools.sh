@@ -113,19 +113,28 @@ provision_firmline() {
       || c_red "    bgrep install failed — it must end up at /usr/local/opt/bgrep/usr/bin/bgrep"
   fi
 
-  # 4. radare2 — the image builds it from upstream (Dockerfile stage 1b), so this is
-  #    normally a no-op.  The vendored tree is only a fallback: it must be built with its
-  #    own capstone fork (a system capstone makes anal_arm_cs.c fail on ARM64_INS_ADRP).
-  if ! have r2 && [ ! -x /usr/local/bin/radare2 ]; then
-    c_blue "    radare2 missing from the image — building the vendored copy as a fallback"
-    [ -d "$root/radare2/shlr/capstone" ] || run_logged firmline make -C "$root/radare2/shlr" capstone-sync \
-      || c_red "    radare2 capstone-sync failed (needs network)"
-    run_logged firmline bash -c "cd '$root/radare2' && sudo sys/install.sh" || c_red "    radare2 install failed"
+  # 4. radare2 — the image installs it under /opt/radare2 (Dockerfile stage 1b), because the
+  #    runtime mounts a named volume over /usr/local and anything the image puts there can be
+  #    masked by a stale copy of that volume; that is how radare2 went missing while the image
+  #    did have it.  Firmline's pipeline.py looks for the executable name `radare2` on PATH.
+  #    The vendored tree is the fallback and ships its own capstone fork (shlr/capstone, present
+  #    in the pinned tree), so building it needs no fetch.
+  if ! radare2 -v >/dev/null 2>&1; then
+    c_blue "    radare2 not runnable — building the vendored copy into /opt/radare2"
+    run_logged firmline bash -c "cd '$root/radare2' && ./configure --prefix=/opt/radare2 && make -j\$(nproc) && sudo make install && printf '/opt/radare2/lib\n' | sudo tee /etc/ld.so.conf.d/radare2.conf >/dev/null && sudo ldconfig" \
+      || c_red "    radare2 build failed — see the log"
   fi
-  if have r2 || [ -x /usr/local/bin/radare2 ]; then
-    c_green "    radare2: $("r2" -v 2>/dev/null | head -1)"
+  # An image older than the /opt/radare2 layout cannot have it on PATH, and PATH is baked into the
+  # image, so a stale volume is not to blame here: put the two names where every shell finds them.
+  if [ -x /opt/radare2/bin/radare2 ] && ! command -v radare2 >/dev/null 2>&1; then
+    sudo ln -sf /opt/radare2/bin/radare2 /usr/local/bin/radare2
+    sudo ln -sf /opt/radare2/bin/r2 /usr/local/bin/r2
+    c_blue "    linked /opt/radare2/bin/{radare2,r2} into /usr/local/bin"
+  fi
+  if radare2 -v >/dev/null 2>&1; then
+    c_green "    radare2: $(radare2 -v 2>/dev/null | head -1)"
   else
-    c_red "    radare2 still missing — the Firmline module needs it"
+    c_red "    radare2 still missing — the Firmline module needs it (name 'radare2' on PATH)"
   fi
 
   # 5. binwalk (legacy python2 setup.py; the patched .gitmodules points it at the vendored copy)
