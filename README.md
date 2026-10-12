@@ -8,6 +8,61 @@ The materials here are provided to support reproducibility and further research.
 
 ---
 
+## Scale-down test: 20 firmware images
+
+The evaluation itself imports 4,571 images and fuzzes each of them for one hour per fuzzer. To check that the
+artifact works end to end without paying that cost, `quickstart.sh` runs the same pipeline on a 20-image draw
+from the corpus — one image per size stratum — and produces every stage, every table and every log the full
+run produces.
+
+```bash
+# 1. the artifact and the firmware corpus (1.6 GB, the stripped form the pipeline itself uses)
+git clone https://github.com/IoTS-P/LargeRehostingTesting.git
+cd LargeRehostingTesting
+evaluation_framework/scripts/fetch_samples_gdrive.sh <google-drive-url-or-id>    # A.3.5; installs gdown
+
+#    Manual download instead of the script: download the evaluation_samples folder from the Google
+#    Drive location given with this artifact, and unpack it in the repository root so that the tree is
+#        evaluation_samples/firmware/<id>.bin              the 4,571 corpus images (334 of them stripped)
+#        evaluation_samples/offsets/<id>.json              segment map of every stripped image
+#        evaluation_samples/stripped_ids.txt               which images are stored stripped
+#        evaluation_samples/original_md5.csv               id, md5 and size of the original images
+#        evaluation_samples/restore_original.py            expands a stripped image to the original
+#        evaluation_samples/scripts/verify_corpus.py       integrity check — run it after unpacking
+#    (the script does exactly that: download, unpack, verify.)
+
+# 2. build the environment if it is missing, start it, provision the six tools, import the draw, run
+#    every stage in dependency order, export the result tables and print a summary — one restartable command
+evaluation_framework/scripts/quickstart.sh
+#    or in one step, letting quickstart fetch the corpus itself:
+#      evaluation_framework/scripts/quickstart.sh --samples-url <google-drive-url-or-id>
+
+# 3. what the run left behind
+ls evaluation_results/db/       # one CSV per database table (next to the shipped stage_*.csv)
+ls evaluation_results/logs/     # per-stage logs, plus 00_import.log for the import
+```
+
+The draw is these 20 ids — the corpus sorted by image size, cut into 20 segments of equal image count, one
+image drawn from each segment with a fixed seed. The selection is reproducible and spans the whole size range,
+3,476 B to 46,569,952 B (46.9 MiB in total, of which the largest image accounts for 44.4 MiB):
+
+```
+5 38 815 1277 1317 2439 2664 2669 2756 3515 3751 3878 11115 13278 14146 15126 17460 17583 18364 18853
+```
+
+Another draw: `QUICK_SELECT_SEED=<n> evaluation_framework/scripts/quickstart.sh`. Exact ids:
+`evaluation_framework/scripts/quickstart.sh --samples 5,815,18853` — those images have to be present under
+`evaluation_samples/firmware/`, or in `evaluation_samples/empirical_study_samples/` for the 23 kept there
+(A.3.5).
+
+Requirements are Docker with Compose and Python 3 for the driver scripts, plus the disk A.2.2 describes. The
+six tool provisions are built once and live in named volumes, so later runs skip them; the three fuzzing
+stages each budget one hour per image and fuzz their images concurrently, which is where the run spends its
+time. The full-corpus workflow and results are in A.4, and the published result tables ship in
+`evaluation_results/`.
+
+---
+
 ## Citation
 
 If you use this code or data in your research, please cite our paper:
