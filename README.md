@@ -8,51 +8,6 @@ The materials here are provided to support reproducibility and further research.
 
 ---
 
-## Scale-down test: 20 firmware images
-
-The full evaluation imports 4,571 images and fuzzes each of them for an hour per fuzzer. `quickstart.sh` runs
-the same pipeline on a 20-image draw instead: one image per size stratum, with every stage and table produced
-the same way.
-
-```bash
-git clone https://github.com/IoTS-P/LargeRehostingTesting.git
-cd LargeRehostingTesting
-
-# firmware corpus (1.6 GB): the script downloads, unpacks and verifies it
-evaluation_framework/scripts/fetch_samples_gdrive.sh <google-drive-url-or-id>     # A.3.5
-#   manual download instead: unpack the evaluation_samples folder from the Google Drive location
-#   given with this artifact into the repository root, so that the tree holds
-#     firmware/<id>.bin          the 4,571 images (334 of them stored stripped)
-#     offsets/<id>.json          segment map of every stripped image
-#     stripped_ids.txt           which images are stored stripped
-#     original_md5.csv           id, md5 and size of the original images
-#     restore_original.py        expands a stripped image to the original
-#     scripts/verify_corpus.py   integrity check — run it after unpacking
-
-# build the image if needed, start the container, provision the six tools, import the draw,
-# run every stage in dependency order, export the tables, print a summary
-evaluation_framework/scripts/quickstart.sh
-```
-
-Results land in `evaluation_results/`: `db/*.csv` (one CSV per database table), `logs/*.log` (per stage, plus
-`00_import.log` for the import), `generated/` (the import lists and the patched stage configs) and
-`export_manifest.txt` (what was exported). Per-firmware project trees are added by
-`evaluation_framework/scripts/export_results.sh --with-artifacts`. The shipped `evaluation_results/stage_1..4.csv` are the published full-corpus
-tables; a test run does not rewrite them.
-
-The 20 ids — the corpus sorted by image size, cut into 20 segments of equal image count, one image drawn from
-each segment with a fixed seed, so the draw is reproducible and spans the size range (3,476 B … 46,569,952 B;
-46.9 MiB in total):
-
-```
-5 38 815 1277 1317 2439 2664 2669 2756 3515 3751 3878 11115 13278 14146 15126 17460 17583 18364 18853
-```
-
-`QUICK_SELECT_SEED=<n>` for another draw, `--samples 5,815,18853` for exact ids. Needs Docker with Compose,
-Python 3 and the disk A.2.2 describes; the provisions are built once into named volumes, and the three fuzzing
-stages each budget one hour per image and fuzz concurrently. The full run is described in A.4.
-
----
 
 ## Citation
 
@@ -66,6 +21,133 @@ If you use this code or data in your research, please cite our paper:
  year = {2026}
 }
 ```
+
+---
+
+## Scaled-Down Experiment: 20 Firmware Images
+
+The full evaluation analyzes 4,571 firmware images for each supported firmware/tool pair. Reproducing the complete campaign requires substantially more than one day. To make artifact evaluation practical, we provide a scaled-down experiment using 20 firmware images.
+
+The scaled-down experiment executes the **same four-stage pipeline**, with the same tool versions, configurations, analysis logic, fuzzing budget, and output format as the full evaluation. Only the number of evaluated firmware images is reduced. It is therefore intended to validate the **functionality and end-to-end reproducibility** of the artifact rather than reproduce the population-level statistics obtained from all 4,571 images.
+
+### Scaled-down Sample Selection
+
+To avoid selecting only small or easy-to-analyze firmware, we use **size-stratified random sampling**.
+
+We first sort all 4,571 firmware images by binary size and divide the ordered corpus into 20 strata containing approximately equal numbers of images. We then randomly select one firmware image from each stratum using a fixed random seed. This produces a reproducible subset spanning the firmware-size distribution, from **3,476 B to 46,569,952 B**, with **46.9 MiB** of firmware in total.
+
+The default 20 firmware IDs are:
+
+```text
+5 38 815 1277 1317 2439 2664 2669 2756 3515
+3751 3878 11115 13278 14146 15126 17460 17583 18364 18853
+```
+
+The selection can be customized as follows:
+
+```bash
+# Generate another reproducible 20-image draw
+QUICK_SELECT_SEED=<n> evaluation_framework/scripts/quickstart.sh
+
+# Evaluate specific firmware IDs
+evaluation_framework/scripts/quickstart.sh --samples 5,815,18853
+```
+
+### Preparation
+
+The scaled-down experiment uses the same software environment and tool versions described in the artifact requirements. It requires Docker with Compose, Python 3, and sufficient disk space for the container, firmware samples, intermediate files, and fuzzing outputs.
+
+Clone the artifact repository:
+
+```bash
+git clone https://github.com/IoTS-P/LargeRehostingTesting.git
+cd LargeRehostingTesting
+```
+
+The firmware corpus used in our evaluation is provided separately to artifact reviewers because of copyright restrictions. Download the reviewer-only corpus with:
+
+```bash
+evaluation_framework/scripts/fetch_samples_gdrive.sh \
+    <google-drive-url>
+```
+
+The script downloads, extracts, and places the dataset under `evaluation_samples/`.
+
+Alternatively, reviewers can manually download the `evaluation_samples/` package from the reviewer-only Google Drive location and extract it into the repository root. The directory contains:
+
+```text
+evaluation_samples/
+├── firmware/<id>.bin
+├── offsets/<id>.json
+├── stripped_ids.txt
+├── original_md5.csv
+├── restore_original.py
+└── scripts/verify_corpus.py
+```
+
+Here:
+
+- `firmware/<id>.bin` contains the 4,571 evaluated firmware images;
+- `offsets/<id>.json` records segment mappings for stripped images;
+- `stripped_ids.txt` identifies firmware stored in stripped form;
+- `original_md5.csv` records the original firmware IDs, MD5 hashes, and sizes;
+- `restore_original.py` reconstructs stripped firmware images; and
+- `scripts/verify_corpus.py` verifies dataset integrity.
+
+### Execution
+
+Run the scaled-down experiment with:
+
+```bash
+evaluation_framework/scripts/quickstart.sh
+```
+
+`quickstart.sh` automatically:
+
+1. builds the evaluation container if needed;
+2. starts the container and database services;
+3. provisions the evaluated tools;
+4. selects and imports the 20 firmware images;
+5. executes all four stages in dependency order;
+6. performs the fuzzing campaigns; and
+7. exports and summarizes the evaluation results.
+
+
+The scaled-down experiment retains the **one-hour-per-firmware fuzzing budget** used in the paper. Firmware instances are executed concurrently. With only 20 firmware images, the experiment is designed to complete within the one-day AEC evaluation budget.
+
+### Results and Validation
+
+All outputs are written under:
+
+```text
+evaluation_results/
+```
+
+The main outputs are:
+
+```text
+evaluation_results/
+├── db/*.csv
+├── logs/*.log
+├── generated/
+└── export_manifest.txt
+```
+
+where:
+
+- `db/*.csv` contains one exported CSV file for each stage results;
+- `logs/*.log` contains execution logs for each stage, including `00_import.log`;
+- `generated/` contains generated import lists and runtime pipeline configurations; and
+- `export_manifest.txt` records the exported result files.
+
+Per-firmware project trees can additionally be exported with:
+
+```bash
+evaluation_framework/scripts/export_results.sh --with-artifacts
+```
+
+A successful scaled-down run should produce outputs for all four pipeline stages, allowing evaluators to verify that the same configuration-recovery, emulation, fuzzing, crash-processing, and diagnosis workflow used in the full study is functional.
+
 
 ---
 
