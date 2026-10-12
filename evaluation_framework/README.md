@@ -215,7 +215,7 @@ wraps.
 ## Run everything (one command)
 
 ```bash
-scripts/quickstart.sh                  # 5 samples, 2 min fuzzing per tool: build if needed,
+scripts/quickstart.sh                  # 20 size-stratified samples, 1 h fuzzing per tool: build if needed,
                                        # start the container, provision tools, import, run all
                                        # stages, export the tables, print a summary
 scripts/quickstart.sh --full           # every sample, the shipped 1 h fuzz budget

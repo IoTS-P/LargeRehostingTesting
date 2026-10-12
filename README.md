@@ -82,7 +82,7 @@ The full evaluation (4,571 firmware samples, three fuzzers, one hour of fuzzing 
 
 Smaller machines are sufficient for functional validation. The artifact itself is modest: the container image is 7.9 GB, and the sample set distributed through Google Drive occupies 1.6 GB in the pipeline's stripped form.
 - The sample set published on Google Drive is the 4,571 `ARM:LE:32:v8T` raw-binary firmware images this evaluation uses (stages 1–3). It is distributed in the offset-stripped form and occupies 1.6 GB on disk; `evaluation_samples/restore_original.py` expands it to the 27.7 GB (25.8 GiB) of original firmware. Only 334 of the images are stored stripped (they restore to 26.6 GB); the other 4,237 are already in their original form and account for 1.1 GB. This is the evaluation subset, not the 47 GB / 19,011-image library on the reference server, which additionally holds other architectures and formats.
-- For small-scale smoke testing, the five sample ARM firmware files selected by `scripts/quickstart.sh` require only 231 KB.
+- For small-scale testing, the 20 images `scripts/quickstart.sh` draws by default (one per size stratum, seed 1) total 46.9 MiB, of which the largest single image is 44.4 MiB.
 
 ### A.2.3 Software Dependencies
 
@@ -224,31 +224,28 @@ back rather than searching again. A value Ghidra does not know fails at parse ti
 ### A.3.7 One-shot run
 
 ```bash
-evaluation_framework/scripts/quickstart.sh           # 5 hard-coded samples, 2 min fuzzing per tool
+evaluation_framework/scripts/quickstart.sh           # 20 size-stratified samples, 1 h fuzzing per tool
 evaluation_framework/scripts/quickstart.sh --full    # every sample, shipped 1 h fuzz budget
 ```
 
-`quickstart.sh` builds the image if it is missing, starts the container (first boot initialises PostgreSQL and creates the `akiba-instance`), provisions whichever of the tool trees are still missing, fetches the sample set when `--samples-url` is given (otherwise it uses the empirical-study images that ship with the artifact), imports the selection and then runs the pipeline — `00b` pre-analysis → `01` FirmXRay → `02b` admission → `03` Fuzzware → `03b` P²IM → `04` Hoedur → `05` MultiFuzz → `06`/`06b` FirmRCA → `02` Firmline — and finally exports and summarises the result tables. Stage `02b` runs the admission tests of fuzzware, hoedur and MultiFuzz over the pre-analysis project and records, per firmware, whether the seeds are admissible (tables `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results`); it is the stage that separates "cannot be fuzzed" from "fuzzed badly" (paper §V).
+`quickstart.sh` builds the image if it is missing, starts the container (first boot initialises PostgreSQL and creates the `akiba-instance`), provisions whichever of the tool trees are still missing, fetches the sample set when `--samples-url` is given (otherwise it uses the corpus already present in `evaluation_samples/`), imports the selection and then runs the pipeline — `00b` pre-analysis → `01` FirmXRay → `02b` admission → `03` Fuzzware → `03b` P²IM → `04` Hoedur → `05` MultiFuzz → `06`/`06b` FirmRCA → `02` Firmline — and finally exports and summarises the result tables. Stage `02b` runs the admission tests of fuzzware, hoedur and MultiFuzz over the pre-analysis project and records, per firmware, whether the seeds are admissible (tables `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results`); it is the stage that separates "cannot be fuzzed" from "fuzzed badly" (paper §V).
 
 The tool provisions live in named volumes (`akiba_home`, `akiba_local`, `akiba_conda`), so later runs skip them; `quickstart.sh` wipes only the pipeline state (database, Ghidra/fuzzware projects) by default, which is what makes a repeated test reproducible. Pass `--keep-state` to resume instead, `--samples 804,3349` to test other ids, or `--list-stages` to see the stage table.
 
 A long import looks silent by nature: the framework is a JVM, and when its stdout is not a console it buffers output in blocks, so a full-corpus import can print nothing at all until it exits. Both `quickstart.sh` and `import_samples.sh` therefore hand it a TTY (`docker exec -t`), stream its output to the terminal and to `evaluation_results/logs/00_import.log`, and print a line about every 20 s with the elapsed time and how many files have been stored in the instance — so a slow import is visibly a slow import rather than a hang. A non-zero status is reported as `import failed (exit N)` instead of being swallowed by the pipe to `tee`.
 
-With the default 2-minute budget the run is a smoke test rather than a measurement. The five
-images produce real tool output — FirmXRay 5 rows, Firmline 5 rows, Fuzzware 4 rows (122 s
-fuzzing each, 0.031–0.149 basic-block coverage), Hoedur 4 rows, MultiFuzz 4 rows (0.127–0.162
-coverage, 1–2 crashes each) and 173 replayed crash records — but three outcomes are expected
-and are not defects:
+The default quick run spends the shipped one-hour budget on 20 images drawn one per size stratum, so it
+is a small-scale measurement rather than a smoke test. The draw depends on the seed (`QUICK_SELECT_SEED`,
+1 by default): the reference draw is 20 images totalling 46.9 MiB. Some outcomes of a run this size are
+expected and are not defects:
 
-- image 804 reports `err_msg = failed` from FirmXRay (a genuine analysis failure, identical to
-  the published stage-1 result);
-- stages 06/06b exit with `Empty query results`: the replay crashes of this small sample set
-  reach at most ≈0.097 basic-block coverage, below the 0.1 reporting threshold, so the
-  root-cause stage has nothing to select. Use a longer budget (`--fuzz-time 30m`) to populate
-  them;
-- Hoedur's per-sample wall time can far exceed the budget when a sample produces many crashes
-  (one image needed 1,320 s of a 120 s budget in the reference run and returned empty
-  statistics).
+- a draw that includes an image FirmXRay cannot analyse reports `err_msg = failed` for it, exactly as
+  the published stage-1 results do for their own failures;
+- stages 06/06b exit with `Empty query results` when every replayed crash of the selection stays below
+  the 0.1 basic-block coverage they select on — the stage declining to report rather than an error. A
+  draw with higher-coverage images, or a longer budget (`--fuzz-time 2h`), fills them;
+- Hoedur's per-sample wall time can far exceed the budget when a sample produces many crashes (in the
+  reference run one image needed 1,320 s of a 120 s budget and returned empty statistics).
 
 ## A.4 Evaluation Workflow
 

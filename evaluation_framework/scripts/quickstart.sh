@@ -2,7 +2,7 @@
 # One-shot run of the whole artifact: initialise the container, provision the six
 # evaluated tools, fetch the sample set and run the full pipeline.
 #
-#   scripts/quickstart.sh                       # quick test: 5 hard-coded samples, 2 min fuzzing
+#   scripts/quickstart.sh                       # quick test: 20 size-stratified samples, 1 h fuzzing
 #   scripts/quickstart.sh --full                # every sample, the shipped 1 h fuzz budget
 #   scripts/quickstart.sh --fuzz-time 5m        # quick test with a different budget
 #   scripts/quickstart.sh --samples 804,3349    # quick test on other ids
@@ -16,10 +16,11 @@
 #   2. start the container: first boot initialises postgres, creates the akiba instance
 #   3. provision the six tools (skipped when they are already provisioned; the
 #      provisions live in named volumes, so this is a one-time cost per volume set)
-#   4. obtain samples: the 23 empirical-study images that ship in empirical_study/ are
-#      always used; when SAMPLES_URL / --samples-url is given, the full sample set is
-#      downloaded from Google Drive first (evaluation_framework/scripts/fetch_samples_gdrive.sh)
-#   5. import the sample selection (5 ids by default, everything with --full)
+#   4. obtain samples: a tree already present in evaluation_samples/ is used as is; with
+#      SAMPLES_URL / --samples-url the corpus is downloaded from Google Drive first
+#      (evaluation_framework/scripts/fetch_samples_gdrive.sh)
+#   5. import the sample selection: 20 images, one drawn from each size stratum of the
+#      corpus (--samples <ids> for an exact set, everything with --full)
 #   6. run the pipeline in the paper's four stages: Stage 1 Reconnaissance (00b, 01, 02) ->
 #      Stage 2 Emulation (02b) -> Stage 3 Security Testing (03/04/05 plus the two related-work
 #      baselines, 03b P²IM and 03c µEmu) -> Stage 4 Diagnosis (06/06b)
@@ -37,13 +38,16 @@ if in_container || ! command -v docker >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------- the quick-test sample selection
-# Small ids from the empirical study (md5-verified against
-# dataset_identification_and_reconstruction/binaries_md5.csv).  They cover the cases the
-# paper discusses: 804 (A-group NPE), 1179, 224, 227 (vulnerability cases) and 3349
-# (the FirmRCA limitation case).  Keep them small — they are imported and fuzzed per run.
-DEFAULT_SAMPLES=(804 1179 224 227 3349)
+# The default quick run does not cherry-pick ids.  The corpus is sorted by size, cut into
+# QUICK_SAMPLES segments of equal image count, and one image is drawn from each segment, so the run
+# spans the whole size range — tiny vector-table images and multi-megabyte ones alike — instead of
+# one corner of it.  The draw is seeded, so the selection is random-looking but reproducible: the
+# same ids come out of every clone, which is what makes two quick runs comparable.  Pass
+# --samples <ids> for an exact set, or change QUICK_SELECT_SEED (env override) for another draw.
+QUICK_SAMPLES=20
+QUICK_SELECT_SEED="${QUICK_SELECT_SEED:-1}"
 STAGE_ORDER="00b,01,02b,03,03b,03c,04,05,06,06b,02"
-QUICK_FUZZ_TIME="2m"
+QUICK_FUZZ_TIME="1h"
 
 FULL=0; BUILD=0; FRESH=1; DO_SAMPLES=1; SKIP_PROVISION=0
 SAMPLES_ARG=""; FUZZ_TIME=""; SAMPLES_URL=""
@@ -58,7 +62,7 @@ while [ $# -gt 0 ]; do
     --fuzz-time)     FUZZ_TIME="$2"; shift 2 ;;
     --samples-url)   SAMPLES_URL="$2"; shift 2 ;;
     --list-stages)   bash "$(dirname "${BASH_SOURCE[0]}")/run_pipeline.sh" --list; exit 0 ;;
-    -h|--help)       sed -n '2,25p' "$0"; exit 0 ;;
+    -h|--help)       sed -n '2,27p' "$0"; exit 0 ;;
     *) die "unknown option $1" ;;
   esac
 done
@@ -178,8 +182,10 @@ print(f"    {len(files)} sample(s) selected (full corpus, arch {arch})")
 PY
 else
   LIST="$GEN_DIR/import_list_quick.json"
-  [ -n "$SAMPLES_ARG" ] && DEFAULT_SAMPLES=($SAMPLES_ARG)
-  python3 - "$AKIBA_ARCH" "$REPO_ROOT/evaluation_samples" "$LIST" "${DEFAULT_SAMPLES[@]}" <<'PY'
+  if [ -n "$SAMPLES_ARG" ]; then
+    # explicit ids (--samples a,b,c): the empirical-study copies first, then the corpus tree
+    DEFAULT_SAMPLES=($SAMPLES_ARG)
+    python3 - "$AKIBA_ARCH" "$REPO_ROOT/evaluation_samples" "$LIST" "${DEFAULT_SAMPLES[@]}" <<'PY'
 import json, pathlib, sys
 arch, root, out, ids = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]), sys.argv[4:]
 entries = []
@@ -192,6 +198,34 @@ for i in ids:
 out.write_text(json.dumps({"entries": entries}, indent=2) + "\n")
 print(f"    {len(entries)} sample(s) selected: {' '.join(ids)} (arch {arch})")
 PY
+  else
+    # Size-stratified default: sort evaluation_samples/firmware by size, cut it into QUICK_SAMPLES
+    # equal-count segments, draw one image per segment with the fixed seed.
+    python3 - "$AKIBA_ARCH" "$REPO_ROOT/evaluation_samples" "$LIST" "$QUICK_SAMPLES" "$QUICK_SELECT_SEED" <<'PY'
+import json, pathlib, random, sys
+
+arch, root, out = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3])
+strata, seed = int(sys.argv[4]), int(sys.argv[5])
+images = sorted((p for p in (root / "firmware").glob("*.bin") if p.is_file()),
+                key=lambda p: (p.stat().st_size, p.name))
+if len(images) < strata:
+    sys.exit(f"only {len(images)} images under {root}/firmware — need at least {strata}"
+             f" (download the corpus first: see evaluation_samples/README.md)")
+rng = random.Random(seed)
+entries, report = [], []
+for k in range(strata):
+    lo, hi = k * len(images) // strata, (k + 1) * len(images) // strata
+    segment = images[lo:hi]
+    chosen = rng.choice(segment)
+    entries.append({"path": str(chosen.relative_to(root)), "arch": arch})
+    report.append(f"    stratum {k + 1:2d}/{strata}: {len(segment):4d} images "
+                  f"{segment[0].stat().st_size:>10d}..{segment[-1].stat().st_size:<10d} B -> "
+                  f"{chosen.name} ({chosen.stat().st_size} B)")
+out.write_text(json.dumps({"entries": entries}, indent=2) + "\n")
+print(f"    {len(entries)} sample(s) drawn from {len(images)} images by size, seed {seed}, arch {arch}")
+print("\n".join(report))
+PY
+  fi
 fi
 CONTAINER_LIST="/data/results/generated/$(basename "$LIST")"
 step "importing"
