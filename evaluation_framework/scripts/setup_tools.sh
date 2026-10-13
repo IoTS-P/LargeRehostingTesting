@@ -124,7 +124,11 @@ provision_firmline() {
   # not on PyPI — it is installed from the vendored source in step 5, so drop that pin here.
   # The conda environment is root-owned, hence sudo.
   grep -v '^binwalk==' "$root/requirements.txt" > /tmp/firmline_requirements.txt
-  run_logged firmline sudo /opt/conda/envs/firmline/bin/pip install -r /tmp/firmline_requirements.txt || return 1
+  # pip retries on connection errors by itself, but a dropped TLS session (SSLEOFError) aborts the run;
+  # the shell-level retry is what survives the flaky networks this is built on.
+  retry "installing firmline's python requirements" 3 \
+      run_logged firmline sudo /opt/conda/envs/firmline/bin/pip install -r /tmp/firmline_requirements.txt \
+    || { c_red "    firmline's python requirements failed to install"; return 1; }
   run_logged firmline sudo /opt/conda/envs/firmline/bin/pip install psutil || true
 
   # 2. nested submodules (binwalk, bgrep, cpu_rec, radare2)
@@ -276,9 +280,12 @@ provision_firmrca() {
   [ -x "$FIRMRCA_PYTHON" ] || { c_red "    $FIRMRCA_PYTHON missing (the interpreter FirmRCA's fork needs)"; return 1; }
   if [ ! -x "$root/FirmRCA-fuzzware/bin/fuzzware_harness" ]; then
     run_logged firmrca "$FIRMRCA_PYTHON" -m venv "$root/FirmRCA-fuzzware" || return 1
-    run_logged firmrca "$root/FirmRCA-fuzzware/bin/pip" install --upgrade "setuptools<58" wheel pip
+    retry "installing pip/setuptools in FirmRCA's venv" 3 \
+        run_logged firmrca "$root/FirmRCA-fuzzware/bin/pip" install --upgrade "setuptools<58" wheel pip \
+      || { c_red "    creating FirmRCA's venv failed (network?)"; return 1; }
     # the fork's own dependency set (pycapnp, needed only by the capnp trace format, is skipped)
-    run_logged firmrca "$root/FirmRCA-fuzzware/bin/pip" install archinfo intelhex clint capstone IPython ipdb monkeyhex "PyYAML>=5.3" \
+    retry "installing FirmRCA's python dependencies" 3 \
+        run_logged firmrca "$root/FirmRCA-fuzzware/bin/pip" install archinfo intelhex clint capstone IPython ipdb monkeyhex "PyYAML>=5.3" \
       || { c_red "    installing FirmRCA's python dependencies failed"; return 1; }
     run_logged firmrca "$root/FirmRCA-fuzzware/bin/pip" install matplotlib pandas openpyxl || true
 
