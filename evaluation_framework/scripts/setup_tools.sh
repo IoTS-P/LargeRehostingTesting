@@ -359,7 +359,13 @@ provision_firmrca() {
       retry "cloning capstone" 3 git_net clone --depth 1 https://github.com/capstone-engine/capstone.git "$CAPSTONE_DIR" \
         || { c_red "    cloning capstone failed (network?)"; return 1; }
     fi
-    run_logged firmrca git -C "$CAPSTONE_DIR" reset --hard "$CAPSTONE_COMMIT" || return 1
+    # A --depth 1 clone carries only the branch tip, so the pinned commit is not in it and a plain
+    # `git reset --hard <sha>` fails with "Could not parse object <sha>".  Ask for that one commit.
+    run_logged firmrca git -C "$CAPSTONE_DIR" fetch --depth 1 origin "$CAPSTONE_COMMIT" \
+      || retry "fetching the pinned capstone commit" 3 git_net -C "$CAPSTONE_DIR" fetch --depth 1 origin "$CAPSTONE_COMMIT" \
+      || { c_red "    cannot fetch capstone $CAPSTONE_COMMIT (network?)"; return 1; }
+    run_logged firmrca git -C "$CAPSTONE_DIR" checkout -q --detach "$CAPSTONE_COMMIT" \
+      || { c_red "    capstone $CAPSTONE_COMMIT is not in $CAPSTONE_DIR"; return 1; }
     run_logged firmrca bash -c "cd '$CAPSTONE_DIR' && ./make.sh" || { c_red "    capstone build failed"; return 1; }
     run_logged firmrca bash -c "cd '$CAPSTONE_DIR' && sudo ./make.sh install" || { c_red "    capstone install failed"; return 1; }
     # make.sh installs into /usr (PREFIX default), not /usr/local
