@@ -46,10 +46,11 @@ RUN apt-get update \
 RUN set -eux; \
     mkdir -p /opt/ghidra; cd /opt/ghidra; \
     for v in $(printf '%s\n' "${GHIDRA_VERSION}" "${GHIDRA_FIRMLINE_VERSION}" | sort -u); do \
-      url="$(curl -fsSL "https://api.github.com/repos/NationalSecurityAgency/ghidra/releases/tags/Ghidra_${v}_build" \
+      url="$(curl -fsSL --retry 5 --retry-delay 5 --retry-connrefused --retry-all-errors \
+                "https://api.github.com/repos/NationalSecurityAgency/ghidra/releases/tags/Ghidra_${v}_build" \
              | grep -o 'https://[^"]*\.zip' | head -1)"; \
       test -n "$url"; \
-      curl -fL "$url" -o "ghidra-${v}.zip"; \
+      curl -fL --retry 5 --retry-delay 5 --retry-connrefused --retry-all-errors "$url" -o "ghidra-${v}.zip"; \
       unzip -q "ghidra-${v}.zip"; \
       rm -f "ghidra-${v}.zip"; \
     done; \
@@ -85,7 +86,11 @@ RUN apt-get update \
       ca-certificates curl git build-essential pkg-config file xz-utils python3 \
  && rm -rf /var/lib/apt/lists/*
 RUN set -eux; \
-    git clone --depth 1 --branch "${R2_VERSION}" https://github.com/radareorg/radare2 /tmp/radare2; \
+    for i in 1 2 3; do \
+      git clone --depth 1 --branch "${R2_VERSION}" https://github.com/radareorg/radare2 /tmp/radare2 && break; \
+      rm -rf /tmp/radare2; sleep 5; \
+    done; \
+    test -d /tmp/radare2/.git; \
     cd /tmp/radare2; \
     ./configure --prefix=/opt/radare2; \
     make -j"$(nproc)"; \
