@@ -26,7 +26,7 @@ If you use this code or data in your research, please cite our paper:
 
 ## Scaled-Down Experiment: 20 Firmware Images
 
-The full evaluation analyzes all 4,571 firmware images, and each fuzzing campaign runs on the subset that passes admission (about 1,460–1,500 images per tool). Reproducing the complete campaign takes weeks. To make artifact evaluation practical, we provide a scaled-down experiment using 20 firmware images.
+The full evaluation analyzes all 4,571 firmware images across four stages. Reproducing the complete campaign takes weeks. To make artifact evaluation practical, we provide a scaled-down experiment using 20 firmware images.
 
 The scaled-down experiment executes the **same four-stage pipeline**, with the same tool versions, configurations, analysis logic, fuzzing budget, and output format as the full evaluation. Only the number of evaluated firmware images is reduced. It is therefore intended to validate the **functionality and end-to-end reproducibility** of the artifact rather than reproduce the population-level statistics obtained from all 4,571 images.
 
@@ -135,12 +135,12 @@ evaluation_results/
 
 where:
 
-- `db/*.csv` holds one CSV per database table and view (about 30 files);
-- `logs/*.log` contains execution logs for each stage, including `00_import.log`;
-- `generated/` contains generated import lists and runtime pipeline configurations; and
-- `export_manifest.txt` records the exported result files.
+- `db/*.csv` contains the exported result tables produced by each evaluation stage. Each database table is exported as a corresponding CSV file; the primary result tables are listed below.
+- `logs/*.log` contains the execution logs for each pipeline stage, including setup/import logs such as 00_import.log.
+- `generated/` contains runtime-generated files, primarily the firmware import lists and pipeline configurations used for the current run.
+- `export_manifest.txt` lists the names of the result CSV files exported to db/.
 
-The tables that carry the result of each stage are:
+The primary result tables for each stage are:
 
 | stage | tables |
 |---|---|
