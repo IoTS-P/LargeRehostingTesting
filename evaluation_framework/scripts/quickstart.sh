@@ -125,6 +125,20 @@ else
     ok "all evaluated and related-work tools already provisioned"
   else
     c_blue "    provisioning: ${missing[*]} (long: radare2/conda/venvs are in the image and volumes already)"
+    # setup_tools.sh builds the tools inside the container, but it needs their sources on disk first, and
+    # checking those out is a host-side job: on a fresh clone each of these directories is just an empty
+    # gitlink, so provisioning failed on the first thing it touched.  Run the checkout here instead of
+    # sending the user back to the README; setup.sh is idempotent, so a populated tree costs only seconds.
+    # (Testing a few trees rather than the tools/ directory itself: uEmu-test is vendored into the clone and
+    # would make that directory look non-empty on a fresh checkout.)
+    unchecked=""
+    for t in fuzzware hoedur MultiFuzz p2im FirmRCA firmline; do
+      [ -n "$(ls -A "$REPO_ROOT/evaluated_tools_and_configurations/tools/$t" 2>/dev/null)" ] || unchecked="$unchecked $t"
+    done
+    if [ -n "$unchecked" ]; then
+      c_blue "    tool trees not checked out yet:$unchecked — running setup.sh --with-nested (host side)"
+      bash "$(dirname "${BASH_SOURCE[0]}")/setup.sh" --with-nested || die "tool checkout failed"
+    fi
     bash "$(dirname "${BASH_SOURCE[0]}")/setup_tools.sh" || die "tool provisioning failed"
     ok "tools provisioned"
   fi
