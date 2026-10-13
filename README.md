@@ -26,7 +26,7 @@ If you use this code or data in your research, please cite our paper:
 
 ## Scaled-Down Experiment: 20 Firmware Images
 
-The full evaluation analyzes 4,571 firmware images for each supported firmware/tool pair. Reproducing the complete campaign requires substantially more than one day. To make artifact evaluation practical, we provide a scaled-down experiment using 20 firmware images.
+The full evaluation analyzes all 4,571 firmware images, and each fuzzing campaign runs on the subset that passes admission (about 1,460–1,500 images per tool). Reproducing the complete campaign takes weeks. To make artifact evaluation practical, we provide a scaled-down experiment using 20 firmware images.
 
 The scaled-down experiment executes the **same four-stage pipeline**, with the same tool versions, configurations, analysis logic, fuzzing budget, and output format as the full evaluation. Only the number of evaluated firmware images is reduced. It is therefore intended to validate the **functionality and end-to-end reproducibility** of the artifact rather than reproduce the population-level statistics obtained from all 4,571 images.
 
@@ -34,7 +34,7 @@ The scaled-down experiment executes the **same four-stage pipeline**, with the s
 
 To avoid selecting only small or easy-to-analyze firmware, we use **size-stratified random sampling**.
 
-We first sort all 4,571 firmware images by binary size and divide the ordered corpus into 20 strata containing approximately equal numbers of images. We then randomly select one firmware image from each stratum using a fixed random seed. This produces a reproducible subset spanning the firmware-size distribution, from **3,476 B to 46,569,952 B**, with **46.9 MiB** of firmware in total.
+We first sort all 4,571 firmware images by binary size and divide the ordered corpus into 20 strata containing approximately equal numbers of images. We then randomly select one firmware image from each stratum using a fixed random seed, which makes the selection reproducible.
 
 The default 20 firmware IDs are:
 
@@ -135,10 +135,19 @@ evaluation_results/
 
 where:
 
-- `db/*.csv` contains one exported CSV file for each stage results;
+- `db/*.csv` holds one CSV per database table and view (about 30 files);
 - `logs/*.log` contains execution logs for each stage, including `00_import.log`;
 - `generated/` contains generated import lists and runtime pipeline configurations; and
 - `export_manifest.txt` records the exported result files.
+
+The tables that carry the result of each stage are:
+
+| stage | tables |
+|---|---|
+| 1 | `firmxray_results`, `firmline_results` |
+| 2 | `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results` |
+| 3 | `firmxray_on_fuzzware_results`, `firmxray_fuzzware_replay_crashes`, `hoedur_fuzz_results`, `hoedur_statistics_results`, `multifuzz_results`, `p2im_fuzzing_results` |
+| 4 | `firmrca_results`, `firmrca_classified_results` |
 
 Per-firmware project trees can additionally be exported with:
 
