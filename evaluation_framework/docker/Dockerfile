@@ -90,6 +90,7 @@ RUN set -eux; \
     ./configure --prefix=/opt/radare2; \
     make -j"$(nproc)"; \
     make install; \
+    printf '/opt/radare2/lib\n' > /etc/ld.so.conf.d/radare2.conf; ldconfig; \
     /opt/radare2/bin/radare2 -v; \
     ls -la /opt/radare2/lib/libr_*.so | head -3
 
