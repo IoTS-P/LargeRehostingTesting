@@ -32,23 +32,18 @@ The scaled-down experiment executes the **same four-stage pipeline**, with the s
 
 ### Scaled-down Sample Selection
 
-To avoid selecting only small or easy-to-analyze firmware, we use **size-stratified random sampling**.
-
-We first sort all 4,571 firmware images by binary size and divide the ordered corpus into 20 strata containing approximately equal numbers of images. We then randomly select one firmware image from each stratum using a fixed random seed, which makes the selection reproducible.
+We randomly select 20 firmware images from the firmware that passes the admission tests of all three fuzzing tools (Fuzzware, Hoedur, and MultiFuzz).
 
 The default 20 firmware IDs are:
 
 ```text
-5 38 815 1277 1317 2439 2664 2669 2756 3515
-3751 3878 11115 13278 14146 15126 17460 17583 18364 18853
+209 274 1330 15756 2669 3412 2974 12299 3480 6625
+2651 7883 16868 1748 11115 11990 2442 509 3141 2863
 ```
 
 The selection can be customized as follows:
 
 ```bash
-# Generate another reproducible 20-image draw
-QUICK_SELECT_SEED=<n> evaluation_framework/scripts/quickstart.sh
-
 # Evaluate specific firmware IDs
 evaluation_framework/scripts/quickstart.sh --samples 5,815,18853
 ```

@@ -2,7 +2,7 @@
 # One-shot run of the whole artifact: initialise the container, provision the six
 # evaluated tools, fetch the sample set and run the full pipeline.
 #
-#   scripts/quickstart.sh                       # quick test: 20 size-stratified samples, 1 h fuzzing
+#   scripts/quickstart.sh                       # quick test: the fixed 20 admitted-firmware samples, 1 h fuzzing
 #   scripts/quickstart.sh --full                # every sample, the shipped 1 h fuzz budget
 #   scripts/quickstart.sh --fuzz-time 5m        # quick test with a different budget
 #   scripts/quickstart.sh --samples 804,3349    # quick test on other ids
@@ -19,8 +19,8 @@
 #   4. obtain samples: a tree already present in evaluation_samples/ is used as is; with
 #      SAMPLES_URL / --samples-url the corpus is downloaded from Google Drive first
 #      (evaluation_framework/scripts/fetch_samples_gdrive.sh)
-#   5. import the sample selection: 20 images, one drawn from each size stratum of the
-#      corpus (--samples <ids> for an exact set, everything with --full)
+#   5. import the sample selection: the fixed 20 images that passed the admission tests of all three
+#      fuzzing tools (--samples <ids> for a different set, everything with --full)
 #   6. run the pipeline in the paper's four stages: Stage 1 Reconnaissance (00b, 01, 02) ->
 #      Stage 2 Emulation (02b) -> Stage 3 Security Testing (03/04/05 plus the two related-work
 #      baselines, 03b P²IM and 03c µEmu) -> Stage 4 Diagnosis (06/06b)
@@ -38,14 +38,17 @@ if in_container || ! command -v docker >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------- the quick-test sample selection
-# The default quick run does not cherry-pick ids.  The corpus is sorted by size, cut into
-# QUICK_SAMPLES segments of equal image count, and one image is drawn from each segment, so the run
-# spans the whole size range — tiny vector-table images and multi-megabyte ones alike — instead of
-# one corner of it.  The draw is seeded, so the selection is random-looking but reproducible: the
-# same ids come out of every clone, which is what makes two quick runs comparable.  Pass
-# --samples <ids> for an exact set, or change QUICK_SELECT_SEED (env override) for another draw.
+# The quick run uses a fixed set of QUICK_SAMPLES ids (DEFAULT_SAMPLES below), so every clone evaluates the
+# same images and two quick runs are directly comparable.  Those ids were drawn at random from the firmware
+# that passed the admission tests of all three fuzzing tools when the selection was measured, which is what
+# makes every stage of the four-stage pipeline actually run on every selected image - an image that admission
+# rejects is skipped by the three fuzzing stages.  Pass --samples <ids> to evaluate a different set.
 QUICK_SAMPLES=20
-QUICK_SELECT_SEED="${QUICK_SELECT_SEED:-1}"
+# The quick run used to draw its samples at random; it now uses this fixed set.  Each id passed the admission
+# tests of all three fuzzing tools when the selection was measured (the full passing set is kept in
+# evaluation_framework/data/admission_triple_pass_ids.txt), which is what makes all three fuzzing stages
+# actually run: an image that admission rejects is skipped by them.
+DEFAULT_SAMPLES=(209 274 1330 15756 2669 3412 2974 12299 3480 6625 2651 7883 16868 1748 11115 11990 2442 509 3141 2863)
 STAGE_ORDER="00b,01,02b,03,03b,03c,04,05,06,06b,02"
 QUICK_FUZZ_TIME="1h"
 
@@ -196,10 +199,11 @@ print(f"    {len(files)} sample(s) selected (full corpus, arch {arch})")
 PY
 else
   LIST="$GEN_DIR/import_list_quick.json"
-  if [ -n "$SAMPLES_ARG" ]; then
-    # explicit ids (--samples a,b,c): the empirical-study copies first, then the corpus tree
-    DEFAULT_SAMPLES=($SAMPLES_ARG)
-    python3 - "$AKIBA_ARCH" "$REPO_ROOT/evaluation_samples" "$LIST" "${DEFAULT_SAMPLES[@]}" <<'PY'
+  # The default is the fixed set; --samples overrides it.  Both take the same path, which resolves each id
+  # against the empirical-study copies first and the corpus second, and names the id when it is not there.
+  [ -n "$SAMPLES_ARG" ] || SAMPLES_ARG="${DEFAULT_SAMPLES[*]}"
+  DEFAULT_SAMPLES_IDS=($SAMPLES_ARG)
+  python3 - "$AKIBA_ARCH" "$REPO_ROOT/evaluation_samples" "$LIST" "${DEFAULT_SAMPLES_IDS[@]}" <<'PY'
 import json, pathlib, sys
 arch, root, out, ids = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]), sys.argv[4:]
 entries = []
@@ -208,38 +212,11 @@ for i in ids:
         if cand.exists():
             entries.append({"path": str(cand.relative_to(root)), "arch": arch}); break
     else:
-        sys.exit(f"sample {i} not found under {root}")
+        sys.exit(f"sample {i} not found under {root} - the quick run needs the corpus "
+                 f"(see evaluation_samples/README.md)")
 out.write_text(json.dumps({"entries": entries}, indent=2) + "\n")
 print(f"    {len(entries)} sample(s) selected: {' '.join(ids)} (arch {arch})")
 PY
-  else
-    # Size-stratified default: sort evaluation_samples/firmware by size, cut it into QUICK_SAMPLES
-    # equal-count segments, draw one image per segment with the fixed seed.
-    python3 - "$AKIBA_ARCH" "$REPO_ROOT/evaluation_samples" "$LIST" "$QUICK_SAMPLES" "$QUICK_SELECT_SEED" <<'PY'
-import json, pathlib, random, sys
-
-arch, root, out = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3])
-strata, seed = int(sys.argv[4]), int(sys.argv[5])
-images = sorted((p for p in (root / "firmware").glob("*.bin") if p.is_file()),
-                key=lambda p: (p.stat().st_size, p.name))
-if len(images) < strata:
-    sys.exit(f"only {len(images)} images under {root}/firmware — need at least {strata}"
-             f" (download the corpus first: see evaluation_samples/README.md)")
-rng = random.Random(seed)
-entries, report = [], []
-for k in range(strata):
-    lo, hi = k * len(images) // strata, (k + 1) * len(images) // strata
-    segment = images[lo:hi]
-    chosen = rng.choice(segment)
-    entries.append({"path": str(chosen.relative_to(root)), "arch": arch})
-    report.append(f"    stratum {k + 1:2d}/{strata}: {len(segment):4d} images "
-                  f"{segment[0].stat().st_size:>10d}..{segment[-1].stat().st_size:<10d} B -> "
-                  f"{chosen.name} ({chosen.stat().st_size} B)")
-out.write_text(json.dumps({"entries": entries}, indent=2) + "\n")
-print(f"    {len(entries)} sample(s) drawn from {len(images)} images by size, seed {seed}, arch {arch}")
-print("\n".join(report))
-PY
-  fi
 fi
 CONTAINER_LIST="/data/results/generated/$(basename "$LIST")"
 step "importing"
