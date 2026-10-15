@@ -214,7 +214,7 @@ The full evaluation (4,571 firmware samples, three fuzzers, one hour of fuzzing 
 
 Smaller machines are sufficient for functional validation. The artifact itself is modest: the container image is 7.9 GB, and the sample set distributed through Google Drive occupies 1.6 GB in the pipeline's stripped form.
 - The sample set published on Google Drive is the 4,571 `ARM:LE:32:v8T` raw-binary firmware images this evaluation uses (stages 1–3). It is distributed in the offset-stripped form and occupies 1.6 GB on disk; `evaluation_samples/restore_original.py` expands it to the 27.7 GB (25.8 GiB) of original firmware. Only 334 of the images are stored stripped (they restore to 26.6 GB); the other 4,237 are already in their original form and account for 1.1 GB. This is the evaluation subset, not the 47 GB / 19,011-image library on the reference server, which additionally holds other architectures and formats.
-- For small-scale testing, the 20 images `scripts/quickstart.sh` draws by default (one per size stratum, seed 1) total 46.9 MiB, of which the largest single image is 44.4 MiB.
+- For small-scale testing, the 20 images `scripts/quickstart.sh` uses by default (a random draw from the firmware that passes the admission tests of all three fuzzing tools) total 1.55 MiB, of which the largest single image is 0.21 MiB (219,812 bytes).
 
 ### A.2.3 Software Dependencies
 
