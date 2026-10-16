@@ -18,7 +18,7 @@ If you use this code or data in your research, please cite our paper:
  title = {SoK: A Large-Scale Empirical Study of Emulation-Based Dynamic Analysis Research for ARM Cortex-M Firmware},
  author = {Li, Hongyuan and Wang, Ke and Zhou, Wei and Guan, Le},
  booktitle = {NDSS},
- year = {2026}
+ year = {2027}
 }
 ```
 
