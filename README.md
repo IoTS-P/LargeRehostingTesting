@@ -356,7 +356,7 @@ back rather than searching again. A value Ghidra does not know fails at parse ti
 ### A.3.7 One-shot run
 
 ```bash
-evaluation_framework/scripts/quickstart.sh           # 20 size-stratified samples, 1 h fuzzing per tool
+evaluation_framework/scripts/quickstart.sh           # the fixed 20 admitted samples, 1 h fuzzing per tool
 evaluation_framework/scripts/quickstart.sh --full    # every sample, shipped 1 h fuzz budget
 ```
 
@@ -366,16 +366,16 @@ The tool provisions live in named volumes (`akiba_home`, `akiba_local`, `akiba_c
 
 A long import looks silent by nature: the framework is a JVM, and when its stdout is not a console it buffers output in blocks, so a full-corpus import can print nothing at all until it exits. Both `quickstart.sh` and `import_samples.sh` therefore hand it a TTY (`docker exec -t`), stream its output to the terminal and to `evaluation_results/logs/00_import.log`, and print a line about every 20 s with the elapsed time and how many files have been stored in the instance — so a slow import is visibly a slow import rather than a hang. A non-zero status is reported as `import failed (exit N)` instead of being swallowed by the pipe to `tee`.
 
-The default quick run spends the shipped one-hour budget on 20 images drawn one per size stratum, so it
-is a small-scale measurement rather than a smoke test. The draw depends on the seed (`QUICK_SELECT_SEED`,
-1 by default): the reference draw is 20 images totalling 46.9 MiB. Some outcomes of a run this size are
-expected and are not defects:
+The default quick run spends the shipped one-hour budget on a fixed set of 20 images, all of which passed
+the admission tests of fuzzware, hoedur and MultiFuzz, so it is a small-scale measurement rather than a
+smoke test; every clone evaluates the same 20 images. Some outcomes of a run this size are expected and are
+not defects:
 
-- a draw that includes an image FirmXRay cannot analyse reports `err_msg = failed` for it, exactly as
+- if the set includes an image FirmXRay cannot analyse, it reports `err_msg = failed` for it, exactly as
   the published stage-1 results do for their own failures;
 - stages 06/06b exit with `Empty query results` when every replayed crash of the selection stays below
   the 0.1 basic-block coverage they select on — the stage declining to report rather than an error. A
-  draw with higher-coverage images, or a longer budget (`--fuzz-time 2h`), fills them;
+  selection of higher-coverage images (`--samples <ids>`), or a longer budget (`--fuzz-time 2h`), fills them;
 - Hoedur's per-sample wall time can far exceed the budget when a sample produces many crashes (in the
   reference run one image needed 1,320 s of a 120 s budget and returned empty statistics).
 
