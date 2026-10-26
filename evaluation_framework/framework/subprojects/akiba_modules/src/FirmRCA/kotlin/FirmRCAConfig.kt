@@ -17,5 +17,8 @@ data class FirmRCAConfig (
     var timeoutForEach: Int = 1800,       // seconds
     var specifiedTestCases: List<String>? = null,
     var maximumInsn: Int = 100000,      // Max instruction to backward taint analysis. If 0 or negative, no limit
-    var baseAddressSource: String = "ARMBASEFINDER_RESULTS.BASE_ADDRESS"
+    var baseAddressSource: String = "ARMBASEFINDER_RESULTS.BASE_ADDRESS",
+    // "<table>.<column>" that lists the inputs to analyse when classifiedMode is on.  The 06b config sets it to
+    // firmrca_classified_replays.paths, the table that narrows each firmware down to a handful of crashes.
+    var classifySource: String? = null
 )

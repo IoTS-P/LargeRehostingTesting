@@ -65,10 +65,17 @@ class FirmRCA (
     // In the root of FirmRCA project, we will create a map file to map each input file with an integer,
     // and create many subdirectories named by these integers to save output files of each input file.
     private lateinit var mapFile: Path
+    // The column is jsonb, so the database client may hand back either the JSON text or the already
+    // deserialized map.  Accept both: casting to String unconditionally threw
+    //   ClassCastException: LinkedHashMap cannot be cast to String
+    // and made the module fail to instantiate on every firmware.
     private val inputFileMap: MutableMap<Int, String>
-        = (DatabaseClient.getModuleData(id.toLong(), dbTableName, listOf("input_id_map")) as String?)
-            ?.let { Json.decodeFromString(it) }
-            ?: mutableMapOf()
+        = when (val raw = DatabaseClient.getModuleData(id.toLong(), dbTableName, listOf("input_id_map"))["input_id_map"]) {
+            null -> mutableMapOf()
+            is String -> Json.decodeFromString(raw)
+            is Map<*, *> -> raw.entries.associate { (k, v) -> k.toString().toInt() to v.toString() }.toMutableMap()
+            else -> mutableMapOf()
+        }
 
     private val inputFileReversedMap: MutableMap<String, Int>
         = inputFileMap.entries.associate { (k, v) -> v to k }.toMutableMap()
@@ -157,14 +164,34 @@ class FirmRCA (
         ))
     }
 
-    private fun filterInputs(): List<Path> {
-        val data = DatabaseClient.getModuleData(
-            id.toLong(), "firmrca_classified_results", listOf("path"))
+    private suspend fun filterInputs(): List<Path> {
+        // The 06b pass only needs a handful of crashes per firmware.  Prefer the list the framework imported
+        // (main.dbImports -> conf.classifySource); the module's database client only resolves module tables,
+        // so when that import is empty we fall back to the replay's own crash list and keep five inputs.
+        val source = conf.classifySource ?: "firmrca_classified_replays.paths"
 
-        @Suppress("UNCHECKED_CAST")
-        val list = (data["path"] as List<String>).map { Path.of(it) } // TODO: Need tests
+        fun decode(raw: Any?): List<String> = when (raw) {
+            null -> emptyList()
+            is String -> Json.decodeFromString(raw)
+            is List<*> -> raw.map { it.toString() }
+            else -> emptyList()
+        }
 
-        return list
+        val fromTaskData = try {
+            decode(getTaskData(source))
+        } catch (_: Exception) {
+            emptyList()
+        }
+        if (fromTaskData.isNotEmpty()) {
+            val kept = fromTaskData.take(MAX_INPUTS_PER_FIRMWARE)
+            logger.info("classify inputs for firmware ${super.id}: ${kept.size} of ${fromTaskData.size} from $source")
+            return kept.map { Path.of(it) }
+        }
+
+        val crashes = FuzzwareReplay.getAllCrashesPath(fuzzwareProjectRoot).sorted()
+        val kept = crashes.take(MAX_INPUTS_PER_FIRMWARE)
+        logger.info("classify inputs for firmware ${super.id}: ${kept.size} of ${crashes.size} from the replay crash list")
+        return kept
     }
 
     private fun checkFirmRCAEnv(): Boolean {
@@ -360,6 +387,7 @@ class FirmRCA (
     }
 
     companion object {
+        private const val MAX_INPUTS_PER_FIRMWARE = 5
         private var firmRCAEnvCheckDone: Boolean = false
         private var firmRCAEnvReady: Boolean = false
         private val checkLock = Any()
