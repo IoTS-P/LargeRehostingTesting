@@ -11,6 +11,12 @@
 #   scripts/quickstart.sh --skip-samples        # do not touch evaluation_samples/
 #   scripts/quickstart.sh --list-stages         # show the pipeline stages and exit
 #
+# Inside the container the same script also works, in place: it imports the fixed 20 images (matched by
+# file name, so it does not matter which surrogate ids the instance gave them), runs every stage over
+# exactly those files and exports the tables.  Nothing is wiped there, so it is safe to run while results
+# already exist.  That mode accepts only --fuzz-time (default 1h); the host-side options above need the
+# host.
+#
 # What it does, in order:
 #   1. build the image if it is missing (or always with --build)
 #   2. start the container: first boot initialises postgres, creates the akiba instance
@@ -29,13 +35,112 @@ set -uo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 # quickstart drives the container from outside: it calls `docker exec` and writes host paths under
-# $REPO_ROOT.  Inside the container there is no docker and no host path, so step 5 dies on its first
-# write and step 6 cannot import anything — which reads as "quickstart does not import".  Refuse early.
-if in_container || ! command -v docker >/dev/null 2>&1; then
-  c_red "quickstart.sh runs on the host, not inside the container (it drives the container with docker exec)."
-  c_red "  inside the container, use:  scripts/import_samples.sh  (imports the samples)  and  scripts/run_pipeline.sh"
+# $REPO_ROOT.  Inside the container it instead runs the same fixed 20 images in place (see
+# run_in_container below); the host options need docker.
+IN_CONTAINER=0
+in_container && IN_CONTAINER=1
+if [ "$IN_CONTAINER" = 0 ] && ! command -v docker >/dev/null 2>&1; then
+  c_red "quickstart.sh: not inside the container, and docker is not reachable."
   exit 1
 fi
+
+# ---------------------------------------------------------------- in-container flow
+# One restricted copy of a stage config: the constraint selects the fixed images by *file name*
+# (split_part, no regex and no surrogate ids), and the fuzzing budget is rewritten where the stage has one.
+restrict_config() {   # $1 source config, $2 destination, $3 fuzz budget (empty = leave the budget alone)
+  python3 - "$1" "$2" "${3:-}" "${DEFAULT_SAMPLES[@]}" <<'PY'
+import json, re, sys
+src, dst, spec, ids = sys.argv[1], sys.argv[2], sys.argv[3], [i for i in sys.argv[4:] if i]
+cfg = json.load(open(src))
+cfg["main"]["sqlSource"]["constraint"] = (
+    "WHERE split_part(original_path, '/', -1) IN (%s)" % ", ".join("'%s.bin'" % i for i in ids))
+if spec:
+    m = re.fullmatch(r"(\d+)\s*([smhd]?)", spec.strip())
+    if not m:
+        sys.exit(f"cannot parse --fuzz-time '{spec}' (use e.g. 300s, 10m, 2h)")
+    n, unit = int(m.group(1)), m.group(2) or "s"
+    secs = n * {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
+    budget = {
+        "FirmXRayOnFuzzware": ("maxTimeout", "%02d:%02d:%02d:%02d" % (
+            secs // 86400, secs % 86400 // 3600, secs % 3600 // 60, secs % 60)),
+        "HoedurFuzz": ("maxTimeoutMinutes", f"{max(1, secs // 60)}m"),
+        "MultiFuzz": ("runFor", f"{secs}s"),
+        "P2IMRunner": ("timeoutSeconds", secs),
+    }
+    for task, (field, value) in budget.items():
+        if task in cfg and cfg[task].get(field) is not None:
+            cfg[task][field] = value
+json.dump(cfg, open(dst, "w"), indent=2)
+open(dst, "a").write("\n")
+PY
+}
+
+run_in_container() {   # $1 fuzzing budget
+  local fuzz_time="$1"
+  local gen="$RESULTS_DIR/generated" log="$RESULTS_DIR/logs"
+  mkdir -p "$gen/pipelines" "$log" || return 1
+  local n=${#DEFAULT_SAMPLES[@]} rc_all=0 t0 s id cfg budget
+  c_blue "=== quickstart (inside the container): the fixed $n images, fuzzing budget $fuzz_time ==="
+
+  # 1. the import list, resolved against the sample tree mounted here
+  python3 - "$gen/import_list_quick.json" "$AKIBA_ARCH" "$SAMPLES_DIR" "${DEFAULT_SAMPLES[@]}" <<'PY'
+import json, pathlib, sys
+out, arch, root, ids = pathlib.Path(sys.argv[1]), sys.argv[2], pathlib.Path(sys.argv[3]), sys.argv[4:]
+entries = []
+for i in ids:
+    for cand in (root / "empirical_study_samples" / f"{i}.bin", root / "firmware" / f"{i}.bin"):
+        if cand.is_file():
+            entries.append({"path": str(cand.relative_to(root)), "arch": arch}); break
+    else:
+        sys.exit(f"sample {i} not found under {root} - the corpus must be mounted at {root}")
+json.dump({"entries": entries}, open(out, "w"), indent=2); open(out, "a").write("\n")
+print(f"    {len(entries)} sample(s): {' '.join(ids)}")
+PY
+  [ $? -eq 0 ] || { c_red "could not write the import list"; return 1; }
+
+  # 2. import: skips the files the instance already holds, by checksum
+  cd "$FRAMEWORK" || return 1
+  t0=$(date +%s)
+  c_blue "==> importing $n image(s) (log: $log/00_import.log)"
+  ./bin/akiba_framework -c /data/pipelines/00_import.json@/main -i "$gen/import_list_quick.json" 2>&1 \
+    | tee -a "$log/00_import.log"
+  if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+    c_red "import failed — see $log/00_import.log"; return 1
+  fi
+  c_green "    import done in $(( $(date +%s) - t0 ))s"
+
+  # 3. the stages, in the pipeline order, each on its own restricted copy
+  local stages=( "00b|00b_analyze.json" "01|01_firmxray.json" "02b|02b_admission.json"
+                 "03|03_fuzzware.json" "03b|03b_p2im_elf.json" "03b|03b_p2im.json"
+                 "03c|run_uemu_test.sh" "04|04_hoedur.json" "05|05_multifuzz.json"
+                 "06|06_firmrca.json" "06b|06b_firmrca_classify.json" "02|02_firmline.json" )
+  for s in "${stages[@]}"; do
+    IFS='|' read -r id cfg <<<"$s"
+    if [ "$cfg" = "run_uemu_test.sh" ]; then
+      c_blue "==> [$id] µEmu (direct run, over the parsed ELFs of the selection)"
+      bash "$SCRIPT_DIR/run_uemu_test.sh" --fuzz-time "$fuzz_time" 2>&1 | tee -a "$log/03c_uemu_test.log" \
+        || { c_red "[$id] FAILED (log: $log/03c_uemu_test.log)"; rc_all=1; }
+      continue
+    fi
+    [ -f "/data/pipelines/$cfg" ] || { c_red "missing /data/pipelines/$cfg"; rc_all=1; continue; }
+    budget=""
+    case "$cfg" in 03_fuzzware.json|04_hoedur.json|05_multifuzz.json|03b_p2im.json) budget="$fuzz_time" ;; esac
+    if ! restrict_config "/data/pipelines/$cfg" "$gen/pipelines/$cfg" "$budget"; then
+      c_red "[$id] could not prepare the restricted config"; rc_all=1; continue
+    fi
+    c_blue "==> [$id] $cfg (the fixed $n only${budget:+, budget $budget})"
+    ./bin/akiba_framework -c "$gen/pipelines/$cfg@/main" 2>&1 \
+      | tee -a "$log/${id}_$(basename "$cfg" .json).log" \
+      || { c_red "[$id] FAILED (log: $log/${id}_$(basename "$cfg" .json).log)"; rc_all=1; }
+  done
+
+  # 4. export, exactly as the host flow does
+  c_blue "==> exporting to $RESULTS_DIR/db"
+  bash "$SCRIPT_DIR/export_results.sh" || rc_all=1
+  [ "$rc_all" -eq 0 ] && c_green "quickstart (in container) finished" \
+                      || c_red "one or more stages reported failures — see $log"
+  return "$rc_all"
+}
 
 # ---------------------------------------------------------------- the quick-test sample selection
 # The quick run uses a fixed set of QUICK_SAMPLES ids (DEFAULT_SAMPLES below), so every clone evaluates the
@@ -65,12 +170,30 @@ while [ $# -gt 0 ]; do
     --fuzz-time)     FUZZ_TIME="$2"; shift 2 ;;
     --samples-url)   SAMPLES_URL="$2"; shift 2 ;;
     --list-stages)   bash "$(dirname "${BASH_SOURCE[0]}")/run_pipeline.sh" --list; exit 0 ;;
-    -h|--help)       sed -n '2,27p' "$0"; exit 0 ;;
+    -h|--help)       sed -n '2,/^set -uo pipefail/p' "$0" | sed '$d'; exit 0 ;;
     *) die "unknown option $1" ;;
   esac
 done
 [ "$FULL" = 1 ] && { FUZZ_TIME="" ; }              # --full keeps the shipped one-hour budget
 [ -z "$FUZZ_TIME" ] && [ "$FULL" = 0 ] && FUZZ_TIME="$QUICK_FUZZ_TIME"
+
+# Inside the container there is no image to build and no state to wipe, so only the fuzzing budget applies.
+if [ "$IN_CONTAINER" = 1 ]; then
+  unsupported=""
+  [ "$FULL" = 1 ]           && unsupported="$unsupported --full"
+  [ "$BUILD" = 1 ]          && unsupported="$unsupported --build"
+  [ "$FRESH" = 0 ]          && unsupported="$unsupported --keep-state"
+  [ "$DO_SAMPLES" = 0 ]     && unsupported="$unsupported --skip-samples"
+  [ "$SKIP_PROVISION" = 1 ] && unsupported="$unsupported --skip-provision"
+  [ -n "$SAMPLES_ARG" ]     && unsupported="$unsupported --samples"
+  [ -n "$SAMPLES_URL" ]     && unsupported="$unsupported --samples-url"
+  if [ -n "$unsupported" ]; then
+    c_red "inside the container quickstart.sh accepts only --fuzz-time (got:$unsupported)"
+    exit 1
+  fi
+  run_in_container "${FUZZ_TIME:-$QUICK_FUZZ_TIME}"
+  exit $?
+fi
 
 step()  { echo; c_blue "=== $* ==="; }
 ok()    { c_green "    ok: $*"; }
