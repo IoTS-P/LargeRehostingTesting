@@ -43,12 +43,24 @@ ENV DEBIAN_FRONTEND=noninteractive JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl unzip openjdk-21-jdk-headless \
  && rm -rf /var/lib/apt/lists/*
+# The release asset for the pinned version is fetched by its stable URL instead of being discovered
+# through api.github.com: the API allows 60 anonymous requests per hour per egress IP and answers
+# 403 "API rate limit exceeded" once that is spent, which fails this layer on a shared or reused
+# address.  Any other version still goes through the API lookup.
 RUN set -eux; \
     mkdir -p /opt/ghidra; cd /opt/ghidra; \
     for v in $(printf '%s\n' "${GHIDRA_VERSION}" "${GHIDRA_FIRMLINE_VERSION}" | sort -u); do \
-      url="$(curl -fsSL --retry 5 --retry-delay 5 --retry-connrefused --retry-all-errors \
-                "https://api.github.com/repos/NationalSecurityAgency/ghidra/releases/tags/Ghidra_${v}_build" \
-             | grep -o 'https://[^"]*\.zip' | head -1)"; \
+      case "$v" in \
+        11.3.2) asset="ghidra_11.3.2_PUBLIC_20250415.zip" ;; \
+        *)      asset="" ;; \
+      esac; \
+      if [ -n "$asset" ]; then \
+        url="https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_${v}_build/${asset}"; \
+      else \
+        url="$(curl -fsSL --retry 5 --retry-delay 5 --retry-connrefused --retry-all-errors \
+                  "https://api.github.com/repos/NationalSecurityAgency/ghidra/releases/tags/Ghidra_${v}_build" \
+               | grep -o 'https://[^"]*\.zip' | head -1)"; \
+      fi; \
       test -n "$url"; \
       curl -fL --retry 5 --retry-delay 5 --retry-connrefused --retry-all-errors "$url" -o "ghidra-${v}.zip"; \
       unzip -q "ghidra-${v}.zip"; \
