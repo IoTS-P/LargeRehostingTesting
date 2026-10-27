@@ -379,6 +379,40 @@ not defects:
 - Hoedur's per-sample wall time can far exceed the budget when a sample produces many crashes (in the
   reference run one image needed 1,320 s of a 120 s budget and returned empty statistics).
 
+### A.3.8 Resuming an interrupted run
+
+A run that is interrupted (Ctrl-C, a closed terminal, a killed `docker exec`) leaves the database daemon
+holding the advisory lock it took on the table the running stage was writing. Starting a stage again then
+stops at start-up with
+
+```
+Failed to lock table <table>: Table <table> is locked by other clients
+```
+
+Nothing is lost: the imported images, the results already written and the provisioned tools all live in
+this container's volumes, so the way forward is to free the lock and run the same stage again. Neither
+route below requires any change to the tool code.
+
+**1. Wait for the lock to expire.** The daemon releases a lock whose client has been silent for
+`maxLockWaitingTime`, which is 3600 seconds (one hour). Once it has expired, run the stage again:
+
+```bash
+evaluation_framework/scripts/run_pipeline.sh --only 03_fuzzware
+evaluation_framework/scripts/run_pipeline.sh --restore 03_fuzzware   # or resume a recorded task
+```
+
+**2. Restart the container.** Stopping the container ends the daemon's PostgreSQL sessions, which releases
+the advisory locks immediately. Restart it, wait until the instance answers, and run the stage again:
+
+```bash
+docker restart akiba_for_artifacts
+docker exec akiba_for_artifacts pg_isready -h 127.0.0.1 -p 31800
+evaluation_framework/scripts/run_pipeline.sh --only 03_fuzzware
+```
+
+Both routes reuse what is already in the instance: the firmware does not have to be imported again and the
+image does not have to be rebuilt.
+
 ## A.4 Evaluation Workflow
 
 The artifact automates the full evaluation pipeline, which follows the paper's four stages — **Stage 1 Reconnaissance** (`00b` pre-analysis, `01` FirmXRay, `02` Firmline), **Stage 2 Emulation** (`02b` admission, plus the configuration generation and modelling the fuzzware gateway performs for `03`–`05`), **Stage 3 Security Testing** (the fuzzing tasks of `03`, `03b` P²IM and `04`–`05`) and **Stage 4 Diagnosis** (`06`/`06b` FirmRCA). Stage `02b` is the explicit split between the first two:
