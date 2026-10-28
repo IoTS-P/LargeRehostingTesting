@@ -203,6 +203,34 @@ else
     sudo service postgresql start
 fi
 
+# The main cluster started above is the daemon's own catalogue; each pipeline instance lives in
+# /akiba/instances/<name> and is created by the daemon only on first boot.  After a host reboot the main
+# cluster comes back but the instances do not: the framework then fails to log in ("Instance
+# akiba-instance not found") and every stage dies, while the daemon itself answers on 31777 and the
+# healthcheck passes - which is exactly how it looked after an unplanned power loss.  Bring existing
+# instances up here, and clear a postmaster.pid left behind by the crash when its process is gone.
+echo ">>> Starting database instances"
+for d in /akiba/instances/*/; do
+    [ -d "$d" ] || continue
+    name=$(basename "$d")
+    port=$(python3 -c "import json,sys;print(json.load(open('/akiba/.akiba/instances.json'))[sys.argv[1]]['port'])" "$name" 2>/dev/null || echo 31800)
+    if sudo -u postgres /usr/lib/postgresql/16/bin/pg_isready -h 127.0.0.1 -p "$port" >/dev/null 2>&1; then
+        echo ">>> instance $name already accepting connections on $port"
+        continue
+    fi
+    if [ -f "$d/postmaster.pid" ]; then
+        pid=$(head -1 "$d/postmaster.pid" 2>/dev/null)
+        if ! [ "$pid" -gt 0 ] 2>/dev/null || ! kill -0 "$pid" 2>/dev/null; then
+            echo ">>> removing stale postmaster.pid of $name (pid ${pid:-unknown})"
+            sudo rm -f "$d/postmaster.pid"
+        fi
+    fi
+    sudo -u postgres /usr/lib/postgresql/16/bin/pg_ctl -D "$d" -l "$d/startup.log" \
+        -o "-p $port -c listen_addresses=127.0.0.1" -w -t 60 start \
+        && echo ">>> instance $name started on $port" \
+        || echo ">>> WARNING: could not start instance $name; see $d/startup.log"
+done
+
 echo ">>> Starting main service (akiba database daemon): $*"
 cd "$DAEMON_DIR"
 exec "$@"
