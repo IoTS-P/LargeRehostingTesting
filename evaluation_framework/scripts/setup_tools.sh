@@ -209,6 +209,64 @@ provision_fuzzware() {
   link_tool_clis
 }
 
+# ---------------------------------------------------------------- GDMA helpers
+# The DMA branch needs four fixes before `fuzzware pipeline --dma` runs on this image:
+#   1. the venv ships without setuptools, so the harness dies importing pkg_resources;
+#   2. fuzzware_pipeline must be installed editable - it locates afl-cmin relative to its
+#      own file (../../emulator/afl/afl-cmin), which only resolves inside the source tree;
+#   3. default_base_input_dir() points at <site-packages>/data/base_inputs, which the
+#      installer leaves out;
+#   4. pipeline.py uses self.dma_snippets_dir but never defines the property, so every
+#      --dma run dies in create_dirs().
+fix_gdma_tree() {
+  local root="$1"
+  local venv="$WORKON_HOME/fuzzware_gdma"
+  local sp
+  sp="$(ls -d "$venv"/lib/python*/site-packages 2>/dev/null | head -1)"
+  [ -n "$sp" ] || { c_red "    gdma: site-packages not found in $venv"; return 1; }
+
+  # 1. setuptools (the unicorn binding imports pkg_resources)
+  "$venv/bin/python" -m pip install -q "setuptools<81" wheel || return 1
+
+  # 2. editable pipeline install, so the ../../emulator relative paths resolve
+  "$venv/bin/python" -m pip install -q -e "$root/pipeline" || return 1
+
+  # 3. the generic base inputs the pipeline falls back to
+  [ -e "$sp/data" ] || ln -s "$root/pipeline/data" "$sp/data"
+
+  # 4. the missing dma_snippets_dir property
+  if ! grep -q "def dma_snippets_dir" "$root/pipeline/fuzzware_pipeline/pipeline.py"; then
+    "$venv/bin/python" - "$root/pipeline/fuzzware_pipeline/pipeline.py" <<'PYEOF'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1])
+src = p.read_text()
+anchor = """    @property
+    def config_snippets_dir(self) -> str:
+        return os.path.join(self.base_dir, PIPELINE_DIRNAME_CONFIG_SNIPPETS)
+"""
+add = anchor + """
+    @property
+    def dma_snippets_dir(self) -> str:
+        return os.path.join(self.base_dir, PIPELINE_DIRNAME_DMA_SNIPPETS)
+"""
+if anchor not in src:
+    sys.exit("config_snippets_dir property not found")
+p.write_text(src.replace(anchor, add, 1))
+PYEOF
+    rm -rf "$root/pipeline/fuzzware_pipeline/__pycache__"
+  fi
+
+  # the modeling worker (angr 9.2.93) breaks on pycparser >= 3
+  local mvenv="$WORKON_HOME/fuzzware-modeling"
+  if [ -x "$mvenv/bin/python" ]; then
+    "$mvenv/bin/python" -m pip install -q "pycparser==2.21" || return 1
+  fi
+
+  "$venv/bin/fuzzware" pipeline --help 2>/dev/null | grep -q -- "--dma" \
+    && c_green "    gdma: --dma available" \
+    || { c_red "    gdma: --dma missing after the fixes"; return 1; }
+}
+
 # ---------------------------------------------------------------- GDMA (fuzzware, DMA branch)
 provision_gdma() {
   local root="$TOOLS_ROOT/gdma"
@@ -227,6 +285,7 @@ provision_gdma() {
     || c_red "gdma: venvs missing, check the log"
   link_venv_package fuzzware_gdma "$root"
   ensure_fuzzware_python_deps fuzzware_gdma
+  fix_gdma_tree "$root"
   link_tool_clis
 }
 

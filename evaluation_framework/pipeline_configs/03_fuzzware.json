@@ -78,7 +78,7 @@
   },
   "FirmXRayOnFuzzware": {
     "maxTimeout": "00:01:00:00",
-    "withGDMA": false
+    "withGDMA": true
   },
   "FirmXRayOnFuzzwareReplay": {
     "maxThreads": 32
