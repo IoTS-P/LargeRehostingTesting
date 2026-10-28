@@ -158,7 +158,11 @@ class HoedurStatistics (
         val cmd = "${conf.cmdPredo} && workon fuzzware && cd ${conf.hoedurRoot} && " +
                 "${conf.pythonPath} scripts/eval-bug-combinations.py " +
                 "${hoedurOutputRoot.absolutePathString()} " +           // corpus
-                "--output ${hoedurOutputRoot.absolutePathString()} " +  // output
+                // eval-bug-combinations.py treats --output as a base directory and mirrors the target's
+                // absolute path below it, so passing the project root itself wrote the yml to
+                // <root>/data/akiba/.../<root>/bug-combinations-run-01.yml and the read below failed.
+                // "/" makes it land at <root>/bug-combinations-run-01.yml, which is what this method reads.
+                "--output / " +
                 "--targets ${hoedurOutputRoot.absolutePathString()}"
         logger.info(cmd)
         val builder = ProcessBuilder(*conf.cmdPrefix.toTypedArray(), cmd)

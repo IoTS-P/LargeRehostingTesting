@@ -14,8 +14,8 @@
 # Inside the container the same script also works, in place: it imports the fixed 20 images (matched by
 # file name, so it does not matter which surrogate ids the instance gave them), runs every stage over
 # exactly those files and exports the tables.  Nothing is wiped there, so it is safe to run while results
-# already exist.  That mode accepts only --fuzz-time (default 1h); the host-side options above need the
-# host.
+# already exist.  That mode accepts --fuzz-time (default 1h), --only <stages> and --skip <stages>, so a single
+# stage can be rerun in place; the remaining host-side options above need the host.
 #
 # What it does, in order:
 #   1. build the image if it is missing (or always with --build)
@@ -75,12 +75,28 @@ open(dst, "a").write("\n")
 PY
 }
 
+# Should this stage run under --only / --skip?  Stage ids are the ones in the table below: 00b, 01, 02b,
+# 03, 03b, 03c, 04, 05, 06, 06b, 02.
+should_run_stage() {
+  local sid="$1"
+  if [ -n "${ONLY_STAGES:-}" ]; then
+    case " $ONLY_STAGES " in *" $sid "*) ;; *) return 1 ;; esac
+  fi
+  if [ -n "${SKIP_STAGES:-}" ]; then
+    case " $SKIP_STAGES " in *" $sid "*) return 1 ;; esac
+  fi
+  return 0
+}
+
 run_in_container() {   # $1 fuzzing budget
   local fuzz_time="$1"
   local gen="$RESULTS_DIR/generated" log="$RESULTS_DIR/logs"
   mkdir -p "$gen/pipelines" "$log" || return 1
   local n=${#DEFAULT_SAMPLES[@]} rc_all=0 t0 s id cfg budget
-  c_blue "=== quickstart (inside the container): the fixed $n images, fuzzing budget $fuzz_time ==="
+  local sel=""
+  [ -n "${ONLY_STAGES:-}" ] && sel=" stages: $ONLY_STAGES"
+  [ -n "${SKIP_STAGES:-}" ] && sel="$sel (skipping $SKIP_STAGES)"
+  c_blue "=== quickstart (inside the container): the fixed $n images, fuzzing budget $fuzz_time$sel ==="
 
   # 1. the import list, resolved against the sample tree mounted here
   python3 - "$gen/import_list_quick.json" "$AKIBA_ARCH" "$SAMPLES_DIR" "${DEFAULT_SAMPLES[@]}" <<'PY'
@@ -116,6 +132,10 @@ PY
                  "06|06_firmrca.json" "06b|06b_firmrca_classify.json" "02|02_firmline.json" )
   for s in "${stages[@]}"; do
     IFS='|' read -r id cfg <<<"$s"
+    if ! should_run_stage "$id"; then
+      c_yellow "[$id] skipped (--only/--skip)"
+      continue
+    fi
     if [ "$cfg" = "run_uemu_test.sh" ]; then
       c_blue "==> [$id] µEmu (direct run, over the parsed ELFs of the selection)"
       bash "$SCRIPT_DIR/run_uemu_test.sh" --fuzz-time "$fuzz_time" 2>&1 | tee -a "$log/03c_uemu_test.log" \
@@ -149,6 +169,8 @@ PY
 # makes every stage of the four-stage pipeline actually run on every selected image - an image that admission
 # rejects is skipped by the three fuzzing stages.  Pass --samples <ids> to evaluate a different set.
 QUICK_SAMPLES=20
+ONLY_STAGES=""      # --only <stages>: run just these (in-container mode too)
+SKIP_STAGES=""      # --skip <stages>: run everything except these
 # The quick run used to draw its samples at random; it now uses this fixed set.  Each id passed the admission
 # tests of all three fuzzing tools when the selection was measured (the full passing set is kept in
 # evaluation_framework/data/admission_triple_pass_ids.txt), which is what makes all three fuzzing stages
@@ -168,6 +190,8 @@ while [ $# -gt 0 ]; do
     --skip-provision) SKIP_PROVISION=1; shift ;;
     --samples)       SAMPLES_ARG="${2//,/ }"; shift 2 ;;
     --fuzz-time)     FUZZ_TIME="$2"; shift 2 ;;
+    --only)          ONLY_STAGES="${2//,/ }"; shift 2 ;;
+    --skip)          SKIP_STAGES="${2//,/ }"; shift 2 ;;
     --samples-url)   SAMPLES_URL="$2"; shift 2 ;;
     --list-stages)   bash "$(dirname "${BASH_SOURCE[0]}")/run_pipeline.sh" --list; exit 0 ;;
     -h|--help)       sed -n '2,/^set -uo pipefail/p' "$0" | sed '$d'; exit 0 ;;

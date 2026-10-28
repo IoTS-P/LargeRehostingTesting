@@ -64,7 +64,7 @@
       "/bin/zsh",
       "-ic"
     ],
-    "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
+    "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh && export PATH=/data/tools/hoedur-clean/bin:$PATH",
     "regenerateConfig": true,
     "projectRoot": "hoedur_projects",
     "venv": "fuzzware_gdma"
@@ -88,6 +88,7 @@
     "hoedurRoot": "/data/tools/hoedur",
     "crashArchiveRoot": "hoedur_projects",
     "hoedurLogConfigPath": "/data/tools/hoedur/common/log/debug.yml",
-    "rebaseSource": "firmxray_results.base_address"
+    "rebaseSource": "firmxray_results.base_address",
+    "pythonPath": "python3"
   }
 }

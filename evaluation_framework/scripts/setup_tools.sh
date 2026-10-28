@@ -252,7 +252,23 @@ provision_hoedur() {
 run_logged hoedur bash -c "cd '$root' && /home/akiba/.cargo/bin/cargo build" || return 1
   run_logged hoedur sudo cp "$root/target/release/libqemu-system-arm.release.so" /usr/lib/ || true
   link_hoedur_bins
-  c_green "hoedur: built ($(ls "$root/target/release" 2>/dev/null | grep -c '^hoedur') hoedur binaries)"
+
+  # The admission patch makes the runner return right after the mandatory admission test, so the `fuzz`
+  # command never starts the fuzzer.  The admission module needs that patched tree, the fuzzing stage needs
+  # an unpatched one: build a second tree next to it (revert_hoedur_admission_patch.py) and expose its
+  # binary in hoedur-clean/bin, which 04_hoedur.json puts first on PATH.
+  local clean="$TOOLS_ROOT/hoedur-clean"
+  if [ ! -x "$clean/target/release/hoedur-arm" ]; then
+    c_blue "    building the unpatched tree for fuzzing (hoedur-clean)"
+    run_logged hoedur bash -c "
+      rm -rf '$clean' && mkdir -p '$clean' &&
+      (cd '$root' && tar --exclude='./target' -cf - .) | (cd '$clean' && tar -xf -) &&
+      python3 '$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/revert_hoedur_admission_patch.py' '$clean/hoedur/src/runner.rs' &&
+      cd '$clean' && /home/akiba/.cargo/bin/cargo build --release -p hoedur" || return 1
+  fi
+  mkdir -p "$clean/bin" && ln -sf "$clean/target/release/hoedur-arm" "$clean/bin/hoedur-arm"
+
+  c_green "hoedur: built ($(ls "$root/target/release" 2>/dev/null | grep -c '^hoedur') hoedur binaries; fuzzing build in hoedur-clean)"
 }
 
 # ---------------------------------------------------------------- MultiFuzz
