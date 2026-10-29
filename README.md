@@ -130,19 +130,27 @@ evaluation_results/
 
 where:
 
-- `db/*.csv` contains the exported result tables produced by each evaluation stage. Each database table is exported as a corresponding CSV file; the primary result tables are listed below.
+- `db/*.csv` contains the exported result tables produced by each evaluation stage. Each database table
+  and view is exported as one CSV file with the same name: `export_results.sh` runs
+  `\copy (SELECT * FROM "<name>") TO 'db/<name>.csv' WITH (FORMAT csv, HEADER true)` for every object
+  of the `public` schema, so a file is a straight dump of its table — no columns are renamed or merged,
+  and `export_manifest.txt` lists exactly which files a given export produced (the directory holds 30
+  such files; `firmrca_classified_results.csv` was exported after the stage-4 pass, the rest with the
+  last full export).
+  The four `*_stage_<N>.csv` files in `evaluation_results/` are the hand-reviewed summaries built from
+  these tables; they are not produced by `export_results.sh`.
 - `logs/*.log` contains the execution logs for each pipeline stage, including setup/import logs such as 00_import.log.
 - `generated/` contains runtime-generated files, primarily the firmware import lists and pipeline configurations used for the current run.
 - `export_manifest.txt` lists the names of the result CSV files exported to db/.
 
-The primary result tables for each stage are:
+The primary result tables for each stage, and the file each one lands in:
 
-| stage | tables |
+| stage | table → exported file |
 |---|---|
-| 1 | `firmxray_results`, `firmline_results` |
-| 2 | `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results` |
-| 3 | `firmxray_on_fuzzware_results`, `firmxray_fuzzware_replay_crashes`, `hoedur_fuzz_results`, `hoedur_statistics_results`, `multifuzz_results`, `p2im_fuzzing_results` |
-| 4 | `firmrca_results`, `firmrca_classified_results` |
+| 1 | `firmxray_results` → `db/firmxray_results.csv`, `firmline_results` → `db/firmline_results.csv` |
+| 2 | `fuzzware_admission_results` → `db/fuzzware_admission_results.csv`, `hoedur_admission_results` → `db/hoedur_admission_results.csv`, `multifuzz_admission_results` → `db/multifuzz_admission_results.csv` (seed-level detail: `db/{fuzzware,hoedur,multifuzz}_admission_checks_v2.csv`) |
+| 3 | `firmxray_on_fuzzware_results` → `db/firmxray_on_fuzzware_results.csv` (statistics: `db/firmxray_on_fuzzware_stat_results.csv`), `firmxray_fuzzware_replay_crashes` → `db/firmxray_fuzzware_replay_crashes.csv` (view, one row per replayed crash), `hoedur_fuzz_results` → `db/hoedur_fuzz_results.csv`, `hoedur_statistics_results` → `db/hoedur_statistics_results.csv`, `multifuzz_results` → `db/multifuzz_results.csv`, `p2im_fuzzing_results` → `db/p2im_fuzzing_results.csv` |
+| 4 | `firmrca_results` → `db/firmrca_results.csv`, `firmrca_classified_results` → `db/firmrca_classified_results.csv` |
 
 Per-firmware project trees can additionally be exported with:
 
