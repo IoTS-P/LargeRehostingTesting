@@ -134,8 +134,8 @@ where:
   `\copy (SELECT * FROM "<name>") TO 'db/<file>' WITH (FORMAT csv, HEADER true)` for every table and view
   of the `public` schema, so a file is a straight dump of its table — no columns are renamed or merged.
   The file is named `<tool>_stage_<N>.csv`: the stage the table belongs to is part of the name, e.g.
-  `firmxray_results` is exported as `firmxray_stage_1.csv` and `firmxray_on_fuzzware_results` as
-  `fuzzware_stage_3.csv`. Import/framework book-keeping tables (`binaries`, `processed_binaries`,
+  `firmxray_results` is exported as `firmxray_stage_1.csv`, `firmxray_on_fuzzware_results` as
+  `fuzzware_stage_3.csv` and `firmxray_on_fuzzware_gdma_results` as `gdma_stage_3.csv`. Import/framework book-keeping tables (`binaries`, `processed_binaries`,
   `using_binaries`, `db_backup_tree`, `example_table`, `results`) belong to no stage and keep their own
   names. `export_manifest.txt` lists the files a given export produced.
   The four `*_stage_<N>.csv` files directly under `evaluation_results/` are the hand-reviewed summaries
@@ -150,7 +150,7 @@ The primary result tables for each stage, and the file each one is exported to:
 |---|---|
 | 1 | `firmxray_results` → `db/firmxray_stage_1.csv`, `firmline_results` → `db/firmline_stage_1.csv`, `function_finder_results` → `db/function_finder_stage_1.csv`, `program_initialization_results` → `db/program_initialization_stage_1.csv`, `string_adder_results` → `db/string_adder_stage_1.csv`, `convert_elf_results` → `db/convert_elf_stage_1.csv` |
 | 2 | `fuzzware_admission_results` → `db/fuzzware_admission_stage_2.csv`, `hoedur_admission_results` → `db/hoedur_admission_stage_2.csv`, `multifuzz_admission_results` → `db/multifuzz_admission_stage_2.csv` (seed-level detail: `db/{fuzzware,hoedur,multifuzz}_admission_seeds_stage_2.csv`) |
-| 3 | `firmxray_on_fuzzware_results` → `db/fuzzware_stage_3.csv` (statistics: `db/fuzzware_statistics_stage_3.csv`; replay: `db/fuzzware_replay_stage_3.csv`), `firmxray_fuzzware_replay_crashes` → `db/fuzzware_replay_crashes_stage_3.csv` (view, one row per replayed crash), `p2im_fuzzing_results` → `db/p2im_stage_3.csv`, `hoedur_fuzz_results` → `db/hoedur_stage_3.csv`, `hoedur_statistics_results` → `db/hoedur_statistics_stage_3.csv`, `hoedur_replay_data` → `db/hoedur_replay_stage_3.csv`, `multifuzz_results` → `db/multifuzz_stage_3.csv` |
+| 3 | `firmxray_on_fuzzware_results` → `db/fuzzware_stage_3.csv`, `firmxray_on_fuzzware_gdma_results` → `db/gdma_stage_3.csv` (the same fuzzware pipeline with `--dma`; it is a separate task, so the two runs keep separate numbers) (statistics: `db/fuzzware_statistics_stage_3.csv`; replay: `db/fuzzware_replay_stage_3.csv`), `firmxray_fuzzware_replay_crashes` → `db/fuzzware_replay_crashes_stage_3.csv` (view, one row per replayed crash), `p2im_fuzzing_results` → `db/p2im_stage_3.csv`, `hoedur_fuzz_results` → `db/hoedur_stage_3.csv`, `hoedur_statistics_results` → `db/hoedur_statistics_stage_3.csv`, `hoedur_replay_data` → `db/hoedur_replay_stage_3.csv`, `multifuzz_results` → `db/multifuzz_stage_3.csv` |
 | 4 | `firmrca_results` → `db/firmrca_stage_4.csv`, `firmrca_classified_results` → `db/firmrca_classified_stage_4.csv`, `firmrca_sampling` → `db/firmrca_sampling_stage_4.csv` |
 
 Per-firmware project trees can additionally be exported with:
@@ -466,7 +466,7 @@ The mapping to the paper's stages, its experiments, and the canonical result fil
 |---|---|---|---|---|
 | Stage 1 — Reconnaissance | E1: recovery and verification of base addresses and entry points | `00_import`, `00b_analyze`, `01_firmxray`, `02_firmline` | `firmxray_results`, `firmline_results` | `evaluation_results/reconnaissance_stage_1.csv` |
 | Stage 2 — Emulation | E2: whether firmware passing reconnaissance can be initialized by the emulation tools | `02b_admission`, plus the `FuzzwareGateway` task of `03`–`05` | `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results` | `evaluation_results/emulation_stage_2.csv` |
-| Stage 3 — Security Testing | E3: fuzzing applicability and effectiveness (coverage, crashes, hangs) | fuzzing tasks of `03_fuzzware`, `03b_p2im` (P²IM, related work, run directly), `04_hoedur`, `05_multifuzz`, plus crash replay and statistics | `firmxray_on_fuzzware_results`, `firmxray_fuzzware_replay_crashes`, `hoedur_fuzz_results`, `hoedur_statistics_results`, `multifuzz_results`, `p2im_fuzzing_results` | `evaluation_results/security_testing_stage_3.csv` |
+| Stage 3 — Security Testing | E3: fuzzing applicability and effectiveness (coverage, crashes, hangs) | fuzzing tasks of `03_fuzzware` (plain and with `--dma`), `03b_p2im` (P²IM, related work, run directly), `04_hoedur`, `05_multifuzz`, plus crash replay and statistics | `firmxray_on_fuzzware_results`, `firmxray_on_fuzzware_gdma_results`, `firmxray_fuzzware_replay_crashes`, `hoedur_fuzz_results`, `hoedur_statistics_results`, `multifuzz_results`, `p2im_fuzzing_results` | `evaluation_results/security_testing_stage_3.csv` |
 | Stage 4 — Diagnosis | E4: post-fuzzing diagnosis with FirmRCA and manual validation | `06_firmrca`, `06b_firmrca_classify` | `firmrca_results`, `firmrca_classified_results` | `evaluation_results/diagnosis_stage_4.csv` |
 
 Expected effort, taken from the artifact appendix and included in the single pipeline run: E1 ≈ 10

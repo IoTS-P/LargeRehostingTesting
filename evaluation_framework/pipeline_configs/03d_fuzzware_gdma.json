@@ -1,0 +1,77 @@
+{
+  "metadata": {
+    "description": "Stage 3 Security Testing - the Fuzzware pipeline on its DMA branch (--dma)",
+    "startCommand": "nohup ./bin/akiba_framework -c /data/pipelines/03_fuzzware.json@/main > /data/results/logs/03_fuzzware.log 2>&1 &",
+    "constraint": "WHERE id IN (SELECT id FROM fuzzware_admission_checks_v2 WHERE result = 'PASSED')",
+    "name": "03d_fuzzware_gdma"
+  },
+  "main": {
+    "username": "akiba",
+    "password": "akiba",
+    "usingInstance": "akiba-instance",
+    "general": {
+      "binariesRoot": "/data/akiba/binaries",
+      "importRoot": "/",
+      "processor": "n/a",
+      "autoAnalysisTimeout": 180,
+      "threads": 16
+    },
+    "withGhidraProject": {
+      "projectRoot": "/data/akiba/ghidra_projects",
+      "name": "00b_analyze",
+      "mode": "fork",
+      "forkTo": "03_fuzzware",
+      "continueLog": "03_fuzzware",
+      "overwriteProject": true,
+      "overwriteLog": true,
+      "saveProject": true,
+      "noCreateProgram": false
+    },
+    "sqlSource": {
+      "serverIP": "127.0.0.1",
+      "serverPort": "31777",
+      "useSnapshot": "current",
+      "constraint": "WHERE id IN (SELECT id FROM fuzzware_admission_checks_v2 WHERE result = 'PASSED')",
+      "disableUpdate": false
+    },
+    "dbImports": [
+      "firmxray_results.base_address"
+    ],
+    "tasks": [
+      {
+        "mainClassName": "org.iotsplab.akiba.process.FuzzwareGateway",
+        "configKey": "@@/FuzzwareGateway",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      },
+      {
+        "mainClassName": "org.iotsplab.akiba.process.FirmXRayOnFuzzware",
+        "configKey": "@@/FirmXRayOnFuzzware",
+        "tableName": "firmxray_on_fuzzware_gdma_results",
+        "consoleLogLevel": "debug",
+        "fileLogLevel": "debug"
+      }
+    ]
+  },
+  "FuzzwareGateway": {
+    "cmdPrefix": [
+      "/bin/zsh",
+      "-ic"
+    ],
+    "cmdPredo": "source ~/.zshrc && source /usr/share/virtualenvwrapper/virtualenvwrapper.sh",
+    "regenerateConfig": true,
+    "projectRoot": "fuzzware_projects",
+    "venv": "fuzzware_gdma"
+  },
+  "FirmXRayOnFuzzware": {
+    "maxTimeout": "00:01:00:00",
+    "withGDMA": true
+  },
+  "FirmXRayOnFuzzwareReplay": {
+    "maxThreads": 32
+  },
+  "FuzzwareStat": {
+    "projectRoot": "fuzzware_projects",
+    "rebaseSource": "firmxray_results.base_address"
+  }
+}

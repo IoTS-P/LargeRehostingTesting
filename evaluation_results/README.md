@@ -13,6 +13,7 @@ results/
 │   ├── binaries.csv         imported firmware (path, arch, format, md5, …)
 │   ├── firmxray_stage_1.csv       base address + entry validity per firmware
 │   ├── fuzzware_stage_3.csv       coverage / crashes per firmware
+│   ├── gdma_stage_3.csv           the same run with --dma (DMA detection on)
 │   ├── fuzzware_replay_stage_3.csv
 │   ├── fuzzware_replay_crashes_stage_3.csv   (view, one row per replayed crash)
 │   ├── fuzzware_admission_seeds_stage_2.csv / hoedur_admission_seeds_stage_2.csv /

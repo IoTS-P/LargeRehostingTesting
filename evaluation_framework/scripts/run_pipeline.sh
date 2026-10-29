@@ -26,6 +26,7 @@ STAGES=(
   "01|01_firmxray.json|Stage 1 Reconnaissance — FirmXRay base-address recognition"
   "02b|02b_admission.json|Stage 2 Emulation — seed admission (fuzzware/hoedur/multifuzz)"
   "03|03_fuzzware.json|Stage 3 Security Testing — Fuzzware fuzzing, crash replay, statistics"
+  "03d|03d_fuzzware_gdma.json|Stage 3 Security Testing — the same Fuzzware pipeline on its DMA branch (--dma), separate table"
   "03b|03b_p2im_elf.json|Stage 3 Security Testing — P²IM pass 1 (related work): rebuild the ELF (threads: 1)"
   "03b|03b_p2im.json|Stage 3 Security Testing — P²IM pass 2 (related work): corpus run directly, expected not to emulate"
   "03c|run_uemu_test.sh|Stage 3 Security Testing — µEmu (related work, run directly): uEmu-test harness over the corpus, expected not to emulate"
