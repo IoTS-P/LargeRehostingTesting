@@ -48,13 +48,49 @@ PSQL=(psql -h 127.0.0.1 -p "$PORT" -U "$OWNER" -d "$DB_INSTANCE" -v ON_ERROR_STO
 OBJECTS=$("${PSQL[@]}" -c "SELECT table_name || ' ' || table_type FROM information_schema.tables WHERE table_schema='public' ORDER BY table_type, table_name" 2>/dev/null) \
   || die "cannot connect to the akiba instance database on port $PORT"
 
+# Each result table is exported as <name>_stage_<N>.csv, so a file name says which stage of the
+# paper it belongs to.  The prefix is the tool (or the module that produced the table); the
+# *_admission_checks_v2 tables are the seed-level detail behind *_admission_results.
+declare -A FILE_FOR=(
+  # stage 1 - reconnaissance
+  [firmxray_results]="firmxray_stage_1.csv"
+  [firmline_results]="firmline_stage_1.csv"
+  [function_finder_results]="function_finder_stage_1.csv"
+  [program_initialization_results]="program_initialization_stage_1.csv"
+  [string_adder_results]="string_adder_stage_1.csv"
+  [convert_elf_results]="convert_elf_stage_1.csv"
+  # stage 2 - emulation admission
+  [fuzzware_admission_results]="fuzzware_admission_stage_2.csv"
+  [hoedur_admission_results]="hoedur_admission_stage_2.csv"
+  [multifuzz_admission_results]="multifuzz_admission_stage_2.csv"
+  [fuzzware_admission_checks_v2]="fuzzware_admission_seeds_stage_2.csv"
+  [hoedur_admission_checks_v2]="hoedur_admission_seeds_stage_2.csv"
+  [multifuzz_admission_checks_v2]="multifuzz_admission_seeds_stage_2.csv"
+  # stage 3 - security testing
+  [firmxray_on_fuzzware_results]="fuzzware_stage_3.csv"
+  [firmxray_on_fuzzware_stat_results]="fuzzware_statistics_stage_3.csv"
+  [firmxray_on_fuzzware_replay_results]="fuzzware_replay_stage_3.csv"
+  [firmxray_fuzzware_replay_crashes]="fuzzware_replay_crashes_stage_3.csv"
+  [p2im_fuzzing_results]="p2im_stage_3.csv"
+  [hoedur_fuzz_results]="hoedur_stage_3.csv"
+  [hoedur_statistics_results]="hoedur_statistics_stage_3.csv"
+  [hoedur_replay_data]="hoedur_replay_stage_3.csv"
+  [multifuzz_results]="multifuzz_stage_3.csv"
+  # stage 4 - diagnosis
+  [firmrca_results]="firmrca_stage_4.csv"
+  [firmrca_classified_results]="firmrca_classified_stage_4.csv"
+  [firmrca_sampling]="firmrca_sampling_stage_4.csv"
+)
+
 n=0
 while read -r name kind; do
   [ -n "$name" ] || continue
-  out="$RESULTS_DIR/db/${name}.csv"
+  # bookkeeping tables (binaries, processed_binaries, example_table, db_backup_tree, ...) keep their
+  # own name: they are import/framework state, not a per-stage result
+  out="$RESULTS_DIR/db/${FILE_FOR[$name]:-${name}.csv}"
   if "${PSQL[@]}" -c "\\copy (SELECT * FROM \"$name\") TO '$out' WITH (FORMAT csv, HEADER true)" 2>/dev/null; then
     rows=$(( $(wc -l < "$out") - 1 ))
-    printf '%-42s %-10s %6s rows\n' "$name" "$kind" "$rows"
+    printf '%-38s %-10s %6s rows  -> %s\n' "$name" "$kind" "$rows" "$(basename "$out")"
     n=$((n + 1))
   else
     c_red "failed to export $name"

@@ -1,0 +1,2 @@
+id,path,pc,lr,basic_block_cov,base_address,err_msg,firmrca_results,execute_time
+29,"main001/fuzzers/fuzzer1/crashes/id:000025,sig:11,src:000119,op:havoc,rep:64",134220870,4294967289,0.11351611351611351,134217728,,"{""1"": {""errMsg"": null, ""failed"": false, ""scores"": [99, 99, 99, 99, 99, 99, 100], ""results"": [134220872, 134218956, 134230590, 134234186, 134218692, 134218698, 134218680]}}",2.4
