@@ -138,8 +138,9 @@ where:
   `fuzzware_stage_3.csv` and `firmxray_on_fuzzware_gdma_results` as `gdma_stage_3.csv`.
   Tables with nothing to publish are not exported at all: `function_finder_results` only records that
   the analysis module ran, `db_backup_tree`, `example_table`, `results` and `processed_binaries` are
-  framework book-keeping, `hoedur_replay_data` stays empty on this corpus, and
-  `firmrca_classified_replays` is only the helper view the second FirmRCA pass selects from.  The import tables
+  framework book-keeping, and `firmrca_classified_replays` is only the helper view the second
+  FirmRCA pass selects from.  `hoedur_replay_data` is exported: it lists one row per crash entry
+  that Hoedur recorded, so it is only as populated as the fuzzing corpus was.  The import tables
   (`binaries`, `using_binaries`) belong to no stage and keep their own names. `export_manifest.txt` lists the files a given export produced.
   The four `*_stage_<N>.csv` files directly under `evaluation_results/` are the hand-reviewed summaries
   built from these tables; they are not produced by `export_results.sh`.

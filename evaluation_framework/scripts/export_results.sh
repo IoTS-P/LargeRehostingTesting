@@ -74,6 +74,7 @@ declare -A FILE_FOR=(
   [p2im_fuzzing_results]="p2im_stage_3.csv"
   [hoedur_fuzz_results]="hoedur_stage_3.csv"
   [hoedur_statistics_results]="hoedur_statistics_stage_3.csv"
+  [hoedur_replay_data]="hoedur_replay_stage_3.csv"
   [multifuzz_results]="multifuzz_stage_3.csv"
   # stage 4 - diagnosis
   [firmrca_results]="firmrca_stage_4.csv"
@@ -83,7 +84,7 @@ declare -A FILE_FOR=(
 
 # Tables that carry no result worth publishing: pure-analysis modules that only record that they ran
 # (function_finder), framework bookkeeping (db_backup_tree, example_table, results, processed_binaries)
-# and tables that stay empty on this corpus (hoedur_replay_data).  They are still created by the
+# The replay view is a real result and is exported.  They are still created by the
 # pipeline; only the export skips them.
 declare -A SKIP=(
   [function_finder_results]=1
@@ -91,7 +92,6 @@ declare -A SKIP=(
   [example_table]=1
   [results]=1
   [processed_binaries]=1
-  [hoedur_replay_data]=1
   [firmrca_classified_replays]=1   # helper view the second FirmRCA pass selects from
 )
 

@@ -66,6 +66,7 @@ class HoedurStatistics (
     private val corpusFile: File
     private val reportFile: File?
     private val inputIds: MutableList<Long> = mutableListOf()
+    private var lastCrashCount: Long = 0L
     private val coverage: MutableMap<Long, Double> = mutableMapOf()   // input id, coverage
 
     init {
@@ -144,6 +145,7 @@ class HoedurStatistics (
             updateErr("broken zst file")
         }
 
+        lastCrashCount = crashCount
         updateData(mapOf(
             "crash_count" to crashCount, "timeout_count" to timeoutCount, "exit_count" to exitCount))
     }
@@ -171,6 +173,21 @@ class HoedurStatistics (
 
         val outputPath: Path = hoedurOutputRoot.resolve("bug-combinations-run-01.yml")
         if (outputPath.notExists()) {
+            // eval-bug-combinations.py writes "[]" when the corpus has no crash entries but writes
+            // nothing at all when the archive has no crash/timeout/exit directories; both mean the
+            // same thing.  Record an empty list instead of leaving full_crash_info NULL, which made
+            // the hoedur_replay_data view look broken rather than empty.
+            if (lastCrashCount == 0L) {
+                logger.info("No crash entries in the corpus, recording an empty crash list")
+                updateData(mapOf(
+                    "unique_bugcomb_count" to 0L,
+                    "unique_crash_count" to 0L,
+                    "unique_nonexec_count" to 0L,
+                    "unique_writeprot_count" to 0L,
+                    "full_crash_info" to "[]"
+                ))
+                return
+            }
             logger.error("Output file not found")
             updateErr("Output file not found")
             return
