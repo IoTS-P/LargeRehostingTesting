@@ -135,9 +135,12 @@ where:
   of the `public` schema, so a file is a straight dump of its table — no columns are renamed or merged.
   The file is named `<tool>_stage_<N>.csv`: the stage the table belongs to is part of the name, e.g.
   `firmxray_results` is exported as `firmxray_stage_1.csv`, `firmxray_on_fuzzware_results` as
-  `fuzzware_stage_3.csv` and `firmxray_on_fuzzware_gdma_results` as `gdma_stage_3.csv`. Import/framework book-keeping tables (`binaries`, `processed_binaries`,
-  `using_binaries`, `db_backup_tree`, `example_table`, `results`) belong to no stage and keep their own
-  names. `export_manifest.txt` lists the files a given export produced.
+  `fuzzware_stage_3.csv` and `firmxray_on_fuzzware_gdma_results` as `gdma_stage_3.csv`.
+  Tables with nothing to publish are not exported at all: `function_finder_results` only records that
+  the analysis module ran, `db_backup_tree`, `example_table`, `results` and `processed_binaries` are
+  framework book-keeping, `hoedur_replay_data` stays empty on this corpus, and
+  `firmrca_classified_replays` is only the helper view the second FirmRCA pass selects from.  The import tables
+  (`binaries`, `using_binaries`) belong to no stage and keep their own names. `export_manifest.txt` lists the files a given export produced.
   The four `*_stage_<N>.csv` files directly under `evaluation_results/` are the hand-reviewed summaries
   built from these tables; they are not produced by `export_results.sh`.
 - `logs/*.log` contains the execution logs for each pipeline stage, including setup/import logs such as 00_import.log.
@@ -148,9 +151,9 @@ The primary result tables for each stage, and the file each one is exported to:
 
 | stage | table → exported file |
 |---|---|
-| 1 | `firmxray_results` → `db/firmxray_stage_1.csv`, `firmline_results` → `db/firmline_stage_1.csv`, `function_finder_results` → `db/function_finder_stage_1.csv`, `program_initialization_results` → `db/program_initialization_stage_1.csv`, `string_adder_results` → `db/string_adder_stage_1.csv`, `convert_elf_results` → `db/convert_elf_stage_1.csv` |
+| 1 | `firmxray_results` → `db/firmxray_stage_1.csv`, `firmline_results` → `db/firmline_stage_1.csv`, `program_initialization_results` → `db/program_initialization_stage_1.csv`, `string_adder_results` → `db/string_adder_stage_1.csv`, `convert_elf_results` → `db/convert_elf_stage_1.csv` |
 | 2 | `fuzzware_admission_results` → `db/fuzzware_admission_stage_2.csv`, `hoedur_admission_results` → `db/hoedur_admission_stage_2.csv`, `multifuzz_admission_results` → `db/multifuzz_admission_stage_2.csv` (seed-level detail: `db/{fuzzware,hoedur,multifuzz}_admission_seeds_stage_2.csv`) |
-| 3 | `firmxray_on_fuzzware_results` → `db/fuzzware_stage_3.csv`, `firmxray_on_fuzzware_gdma_results` → `db/gdma_stage_3.csv` (the same fuzzware pipeline with `--dma`; it is a separate task, so the two runs keep separate numbers) (statistics: `db/fuzzware_statistics_stage_3.csv`; replay: `db/fuzzware_replay_stage_3.csv`), `firmxray_fuzzware_replay_crashes` → `db/fuzzware_replay_crashes_stage_3.csv` (view, one row per replayed crash), `p2im_fuzzing_results` → `db/p2im_stage_3.csv`, `hoedur_fuzz_results` → `db/hoedur_stage_3.csv`, `hoedur_statistics_results` → `db/hoedur_statistics_stage_3.csv`, `hoedur_replay_data` → `db/hoedur_replay_stage_3.csv`, `multifuzz_results` → `db/multifuzz_stage_3.csv` |
+| 3 | `firmxray_on_fuzzware_results` → `db/fuzzware_stage_3.csv` (statistics: `db/fuzzware_statistics_stage_3.csv`; replay: `db/fuzzware_replay_stage_3.csv`), `firmxray_on_fuzzware_gdma_results` → `db/gdma_stage_3.csv` (the same pipeline with `--dma`, its own stage so the two runs keep separate numbers), `firmxray_fuzzware_replay_crashes` → `db/fuzzware_replay_crashes_stage_3.csv` (view, one row per replayed crash), `p2im_fuzzing_results` → `db/p2im_stage_3.csv`, `hoedur_fuzz_results` → `db/hoedur_stage_3.csv`, `hoedur_statistics_results` → `db/hoedur_statistics_stage_3.csv`, `multifuzz_results` → `db/multifuzz_stage_3.csv` |
 | 4 | `firmrca_results` → `db/firmrca_stage_4.csv`, `firmrca_classified_results` → `db/firmrca_classified_stage_4.csv`, `firmrca_sampling` → `db/firmrca_sampling_stage_4.csv` |
 
 Per-firmware project trees can additionally be exported with:

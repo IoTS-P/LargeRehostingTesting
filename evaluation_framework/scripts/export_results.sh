@@ -55,7 +55,6 @@ declare -A FILE_FOR=(
   # stage 1 - reconnaissance
   [firmxray_results]="firmxray_stage_1.csv"
   [firmline_results]="firmline_stage_1.csv"
-  [function_finder_results]="function_finder_stage_1.csv"
   [program_initialization_results]="program_initialization_stage_1.csv"
   [string_adder_results]="string_adder_stage_1.csv"
   [convert_elf_results]="convert_elf_stage_1.csv"
@@ -75,7 +74,6 @@ declare -A FILE_FOR=(
   [p2im_fuzzing_results]="p2im_stage_3.csv"
   [hoedur_fuzz_results]="hoedur_stage_3.csv"
   [hoedur_statistics_results]="hoedur_statistics_stage_3.csv"
-  [hoedur_replay_data]="hoedur_replay_stage_3.csv"
   [multifuzz_results]="multifuzz_stage_3.csv"
   # stage 4 - diagnosis
   [firmrca_results]="firmrca_stage_4.csv"
@@ -83,14 +81,34 @@ declare -A FILE_FOR=(
   [firmrca_sampling]="firmrca_sampling_stage_4.csv"
 )
 
+# Tables that carry no result worth publishing: pure-analysis modules that only record that they ran
+# (function_finder), framework bookkeeping (db_backup_tree, example_table, results, processed_binaries)
+# and tables that stay empty on this corpus (hoedur_replay_data).  They are still created by the
+# pipeline; only the export skips them.
+declare -A SKIP=(
+  [function_finder_results]=1
+  [db_backup_tree]=1
+  [example_table]=1
+  [results]=1
+  [processed_binaries]=1
+  [hoedur_replay_data]=1
+  [firmrca_classified_replays]=1   # helper view the second FirmRCA pass selects from
+)
+
 n=0
+skipped=0
+PRODUCED=()
 while read -r name kind; do
   [ -n "$name" ] || continue
-  # bookkeeping tables (binaries, processed_binaries, example_table, db_backup_tree, ...) keep their
-  # own name: they are import/framework state, not a per-stage result
+  if [ -n "${SKIP[$name]:-}" ]; then
+    skipped=$((skipped + 1))
+    continue
+  fi
+  # the import tables (binaries, using_binaries) belong to no stage and keep their own name
   out="$RESULTS_DIR/db/${FILE_FOR[$name]:-${name}.csv}"
   if "${PSQL[@]}" -c "\\copy (SELECT * FROM \"$name\") TO '$out' WITH (FORMAT csv, HEADER true)" 2>/dev/null; then
     rows=$(( $(wc -l < "$out") - 1 ))
+    PRODUCED+=("$(basename "$out")")
     printf '%-38s %-10s %6s rows  -> %s\n' "$name" "$kind" "$rows" "$(basename "$out")"
     n=$((n + 1))
   else
@@ -98,7 +116,18 @@ while read -r name kind; do
   fi
 done <<< "$OBJECTS"
 
-echo "$n object(s) exported to $RESULTS_DIR/db"
+# drop CSVs from earlier runs that this export did not produce (renamed or now-skipped tables)
+stale=0
+produced_list=" ${PRODUCED[*]} "
+while IFS= read -r f; do
+  b="$(basename "$f")"
+  case "$produced_list" in
+    *" $b "*) ;;
+    *) rm -f "$f"; stale=$((stale + 1)) ;;
+  esac
+done < <(find "$RESULTS_DIR/db" -maxdepth 1 -name '*.csv' -type f)
+
+echo "$n object(s) exported to $RESULTS_DIR/db ($skipped skipped: no result to publish, $stale stale file(s) removed)"
 
 # summary file: what was exported, from which instance, and the run timestamps
 {
