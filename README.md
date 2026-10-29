@@ -172,7 +172,9 @@ Our artifact contains the framework, tool snapshots, evaluation data, and detail
   run a single stage, a single module or a single firmware (`docs/pipeline.md` documents the stages
   and the tables they write).
 - `evaluation_samples/` — firmware samples used in the evaluation, provided separately through the reviewer-only Google Drive link (see A.3.5).
-- `evaluation_results/` — per-stage results and intermediate outputs.
+- `evaluation_results/` — per-stage results and intermediate outputs: the four reviewed tables
+  `reconnaissance_stage_1.csv`, `emulation_stage_2.csv`, `security_testing_stage_3.csv` and
+  `diagnosis_stage_4.csv`, plus the raw `db/` export.
 
 **2. Evaluated Tools and Configurations.**  
 `evaluated_tools_and_configurations/` contains snapshots of the evaluated tools, pinned to the versions used in our study, together with the required build instructions, configurations, and local patches. These include FirmXRay, Firmline, Fuzzware, GDMA, Hoedur, MultiFuzz, FirmRCA, P²IM, μEmu, DICE, AidFuzzer, and AIM. Detailed commit IDs and modifications are documented in the corresponding README files.

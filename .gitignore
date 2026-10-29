@@ -13,7 +13,7 @@
 #   evaluation_framework/framework/                   ->  /opt/rehosting/framework (ro)
 #
 # From those trees only the published per-stage result tables
-# (evaluation_results/stage_*.csv) and the READMEs are tracked.
+# (the per-stage result tables, *_stage_*.csv) and the READMEs are tracked.
 # =============================================================================
 
 # --- sample corpus: hosted on Google Drive, see README.md A.3.5 ---------------
@@ -27,7 +27,7 @@ evaluation_samples/
 # exported per-firmware trees (artifacts/) and the export manifest
 evaluation_results/*
 !evaluation_results/README.md
-!evaluation_results/stage_*.csv
+!evaluation_results/*_stage_*.csv
 
 # --- evaluation_framework: build products of the framework and the modules ----
 evaluation_framework/framework/build/
