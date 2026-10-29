@@ -1,0 +1,100 @@
+# µEmu / S2E environment for the artifact.
+#
+# The artifact's main image is Ubuntu 24.04; S2E (the emulator µEmu is a plugin of) is built
+# against focal with gcc-9, so it gets its own image.  The steps follow the µEmu repository's
+# vagrant-bootstrap.sh: the deps are the ones its comment points at
+# (https://github.com/S2E/s2e/blob/master/Dockerfile), then the manifest branch 'uEmu' is
+# synced and built with its own Makefile.
+FROM docker.m.daocloud.io/ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+
+# i386 is needed for the 32-bit libelf/libglib that the S2E toolchain links against
+RUN dpkg --add-architecture i386 \
+ && apt-get update \
+ && apt-get -y install --no-install-recommends \
+        build-essential cmake wget curl ca-certificates git texinfo flex bison \
+        python-dev python3-dev python3-venv python3-distro mingw-w64 lsb-release \
+        libdwarf-dev libelf-dev libelf-dev:i386 \
+        libboost-dev zlib1g-dev libjemalloc-dev nasm pkg-config \
+        libmemcached-dev libpq-dev libc6-dev-i386 binutils-dev \
+        libboost-system-dev libboost-serialization-dev libboost-regex-dev \
+        libbsd-dev libpixman-1-dev libncurses5 libtinfo5 \
+        libglib2.0-dev libglib2.0-dev:i386 python3-docutils libpng-dev \
+        gcc-multilib g++-multilib gcc-9 g++-9 \
+        python3-pip rsync \
+ && rm -rf /var/lib/apt/lists/*
+
+# the Google 'repo' tool (focal ships it as a snap, so fetch the launcher)
+RUN mkdir -p /usr/local/bin \
+ && curl -fsSL --retry 8 --retry-delay 5 \
+         https://storage.googleapis.com/git-repo-downloads/repo -o /usr/local/bin/repo \
+ && chmod a+rx /usr/local/bin/repo
+
+
+ENV uEmuDIR=/opt/uemu
+WORKDIR /opt
+
+# the manifest branch pins s2e, qemu, libs2e and the µEmu plugin
+RUN git config --global user.email "artifact@example.org" \
+ && git config --global user.name  "artifact" \
+ && mkdir -p /opt/uemu/build /opt/uemu/.repo-cache \
+ && cd /opt/uemu \
+ && repo init -u https://github.com/MCUSec/manifest.git -b uEmu --no-repo-verify \
+ && repo sync -j4 --no-clone-bundle --no-tags
+
+# S2E's guest-tools rules fetch tickler.exe / libs2e{32,64}.dll from GitHub release assets with a
+# bare wget.  Through this host's proxy the TLS handshake to release-assets.githubusercontent.com
+# intermittently fails, and wget does NOT retry that ("Unable to establish SSL connection"), which
+# aborts the build.  Wrap it in a loop; placed after repo sync so tweaks here keep that layer cached.
+RUN printf '#!/bin/sh\nfor i in 1 2 3 4 5 6 7 8 9 10; do\n  /usr/bin/wget "$@" && exit 0\n  echo "wget failed, retry $i" >&2\n  sleep 5\ndone\nexit 1\n' \
+        > /usr/local/bin/wget \
+ && chmod +x /usr/local/bin/wget \
+ && head -3 /usr/local/bin/wget
+
+RUN chmod +x /opt/uemu/s2e/libs2e/configure \
+ && curl -fsSL https://raw.githubusercontent.com/MCUSec/uEmu/main/ptracearm.h \
+         -o /usr/include/x86_64-linux-gnu/asm/ptracearm.h
+
+# build S2E (long) and install it into /opt/uemu/install.
+# No -j here: the Makefile downloads clang (433 MB, ~10 min) and the guest-tools targets
+# configure against /opt/uemu/build/opt/bin/clang, so parallel jobs race the download.  The
+# upstream vagrant-bootstrap.sh also builds serially.
+RUN cd /opt/uemu/build \
+ && make -f /opt/uemu/Makefile \
+ && make -f /opt/uemu/Makefile install
+
+# the fuzzer µEmu drives
+RUN cd /opt/uemu/AFL && make
+
+# µEmu itself: the manifest above only carries s2e/qemu/AFL, while uEmu-helper.py and the launch
+# templates live in the MCUSec/uEmu repository.  vagrant-bootstrap.sh gets them by running
+# `repo init` inside a checkout of that repository; here the build dir is already /opt/uemu, so
+# clone next to it and drop the helper + templates where the harness expects them.
+RUN git clone --depth 1 https://github.com/MCUSec/uEmu /opt/uemu-src \
+ && cp /opt/uemu-src/uEmu-helper.py \
+       /opt/uemu-src/launch-uEmu-template.sh \
+       /opt/uemu-src/launch-AFL-template.sh \
+       /opt/uemu-src/uEmu-config-template.lua \
+       /opt/uemu-src/library.lua \
+       /opt/uemu/ \
+ && ls -l /opt/uemu/uEmu-helper.py /opt/uemu/launch-uEmu-template.sh
+
+# the harness that the artifact ships talks to uEmu-helper.py with `python3`; keep a <=3.11
+# interpreter first on PATH (focal's python3 is 3.8, which is what the helper expects)
+RUN python3 -m pip install --no-cache-dir pyyaml jinja2 \
+ && python3 -c "import yaml, jinja2, configparser; configparser.SafeConfigParser; print('harness deps ok')"
+
+# launch-uEmu.sh (rendered by uEmu-helper.py) runs the release build directly:
+#   LD_PRELOAD=$uEmu_DIR/build/opt/share/libs2e/libs2e-arm-s2e.so \
+#   $uEmu_DIR/build/opt/bin/qemu-system-arm -M mps2-ans2e -cpu cortex-m3 ... -enable-kvm
+# so these two paths are what have to exist - there is no `s2e` launcher in this setup.
+ENV PATH=/opt/uemu/build/opt/bin:/opt/uemu/AFL:$PATH
+ENV LD_LIBRARY_PATH=/opt/uemu/build/opt/lib:/opt/uemu/build/opt/lib/x86_64-linux-gnu
+
+RUN test -x /opt/uemu/build/opt/bin/qemu-system-arm \
+ && test -f /opt/uemu/build/opt/share/libs2e/libs2e-arm-s2e.so \
+ && echo "s2e release build present" 
+
+CMD ["/bin/bash"]

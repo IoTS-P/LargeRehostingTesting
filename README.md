@@ -522,12 +522,44 @@ Each tool in `evaluated_tools_and_configurations/tools/` has standalone build in
 | MultiFuzz | cargo build --release | Ghidra submodule for config generation |
 | FirmRCA | venv + capstone make + capnproto/pomp | Virtualenv, capstone system library |
 | P²IM | `make -C afl/`; QEMU either from `qemu/precompiled_bin/` or built from source (`docs/build_qemu.md`) | AFL, QEMU (TriforceAFL-based), ARM cross toolchain to prepare firmware |
-| μEmu | Vagrant VM (`vagrant up`) or source build (`make -f $uEmuDIR/Makefile && make install` in `$uEmuDIR/build`, ≈60 min on 4 cores) | S2E 2.0 package set (see `vagrant-bootstrap.sh`), QEMU/KVM, `ptracearm.h` installed into `/usr/include/x86_64-linux-gnu/asm` |
+| μEmu | `evaluation_framework/docker/Dockerfile.uemu` (ubuntu:20.04 + the `MCUSec/manifest` branch `uEmu`; `docker compose … up -d uemu`, ≈40 min on 8 cores) | S2E 2.0 package set (see `vagrant-bootstrap.sh`), gcc-9, QEMU/KVM, `ptracearm.h`; the container needs `--device /dev/kvm` because `launch-uEmu.sh` passes `-enable-kvm` |
 | DICE | apply `DICE-Patches/DICE-P2IM.patch` to the bundled `p2im` and rebuild QEMU, and `DICE-Patches/DICE-MIPS-EMULATOR.patch` to `mips-emulator`; precompiled binaries under `DICE-precompiled/` | P²IM's QEMU build prerequisites, `mipsel-softmmu` target for the MIPS build |
 | AidFuzzer | upstream prebuilt image (`docker pull wjqsec555/aidfuzz`), or build the in-tree `framework/` against the vendored `qemu-7.2.0/`; run `framework/bin/iofuzz fuzz <config.yml> ./simulator -corpus <dir>` | QEMU 7.2.0 (vendored), x86-64 Linux; the authors publish their evaluation dataset separately |
 | AIM | python virtualenv + `pip install angr==9.2.40 pandas monkeyhex IPython pygraphviz`, plus the two documented angr source edits (tested against angr 8.20.7.27) | Python 3.8, angr, pandas, monkeyhex, IPython, pygraphviz |
 
 The last five rows are standalone builds from each tool's own instructions; `evaluation_framework/scripts/setup_tools.sh` provisions the six pipeline tools (`ALL_TOOLS=(firmxray firmline fuzzware hoedur multifuzz firmrca)`) together with the `gdma` variant on request (`setup_tools.sh gdma`) and does not touch the five related-work snapshots.
+
+### Two containers: the pipeline image and µEmu
+
+µEmu is the one tool that cannot live in the main image. It is a plugin of S2E, and S2E's focal-era
+build (gcc-9, `libtinfo5`, i386 multilib) does not compile against the 24.04 toolchain the pipeline
+image uses. `docker-compose.yml` therefore defines a second service that builds from its own
+`Dockerfile.uemu`:
+
+```bash
+# builds akiba_uemu_s2e and starts it next to akiba_for_artifacts (≈40 min, ~3 GB)
+docker compose -f evaluation_framework/docker/docker-compose.yml up -d --build uemu
+
+# knowledge-base extraction for one sample, then fuzzing against that knowledge base
+docker exec -e AFL_SKIP_CPUFREQ=1 akiba_uemu bash -lc \
+  'cd /data/tools/uEmu-test && uEmuDIR=/opt/uemu python3 pipeline.py kb  --batch smoke --elfs 3'
+docker exec -e AFL_SKIP_CPUFREQ=1 akiba_uemu bash -lc \
+  'cd /data/tools/uEmu-test && uEmuDIR=/opt/uemu python3 pipeline.py fuzz --batch smoke --elfs 3 \
+     --seed testcases/seed_alternating.bin --timeout 180'
+```
+
+Both containers bind-mount `evaluated_tools_and_configurations/tools/uEmu-test`, `evaluation_samples`
+and `evaluation_results`, so the harness and the pipeline see the same paths and results stay in the
+same place. `uemu` needs `--device /dev/kvm` (the compose file requests it): `launch-uEmu.sh` starts
+qemu with `-enable-kvm` and exits immediately without it. `AFL_SKIP_CPUFREQ=1` is required because
+µEmu's AFL 2.56b aborts on a `powersave` cpufreq governor.
+
+On a fresh run the harness renders `launch-AFL.sh` / `launch-uEmu.sh` from the µEmu templates with
+`uEmu-helper.py`, then runs `afl-fuzz` and `qemu-system-arm` together. Two failure modes look like
+"µEmu does not work" but are environment issues: a dangling `<fw>_KB.dat` symlink left in `result/`
+by a run on another machine (the harness replaces dangling links now), and `afl-fuzz` aborting on the
+CPU governor. A run that finishes as `跑满强杀` (killed at the timeout) is normal — the harness stops
+AFL first and only kills `qemu-system-arm` if it does not follow the shutdown signal.
 
 The module JARs are compiled by `evaluation_framework/scripts/build_akiba_modules.py` during the Docker build (see `evaluation_framework/docs/provenance.md` §5).  The image ends up with 37 module JARs — `akiba_modules`'s 36 plus `amod-AkibaUtils-1.0.jar` from `akiba_mod_utils` (the Dockerfile builds `:akiba_mod_utils:moduleJar-AkibaUtils` and copies both `build/libs` directories into `akiba_framework/modules/`).  `AkibaUtils` is a *dependency* of the other modules: without it every module aborts with `Module not found: org.iotsplab.akiba.module.AkibaUtils`.
 

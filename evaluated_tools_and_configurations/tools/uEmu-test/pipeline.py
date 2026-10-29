@@ -641,6 +641,10 @@ def run_fuzz_one(batch, fw, seed, timeout, keep_raw, logfh):
     # KB 文件必须与 cacheFileName 同名且同目录（helper 只写裸文件名）
     if kb:
         link = os.path.join(case, os.path.basename(kb))
+        # result/ 里可能留着别的机器生成的结果，其中的 KB 软链是 dangling 的：lexists() 为真，
+        # 于是不会重建，S2E 就会 "Could not open cache peripheral knowledge base file"。
+        if os.path.lexists(link) and not os.path.exists(link):
+            os.unlink(link)
         if not os.path.lexists(link):
             os.symlink(kb, link)
 

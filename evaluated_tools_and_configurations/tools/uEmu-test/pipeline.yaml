@@ -25,7 +25,7 @@ fuzz:
 
 # AFL executable (the template holds a bare command; it is rewritten to an absolute path after generation)
 # NOTE: the artifact's runner rewrites this to $uEmuDIR/AFL/afl-fuzz for its own runs.
-afl_bin: /home/czs/uEmu/AFL/afl-fuzz
+afl_bin: /opt/uemu/AFL/afl-fuzz
 
 # KB file matching pattern (looked up under kb/<fw>/)
 kb_glob: "*_KB.dat"

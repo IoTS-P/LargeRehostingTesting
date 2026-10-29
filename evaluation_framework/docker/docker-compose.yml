@@ -91,6 +91,31 @@ services:
       retries: 5
       start_period: 20s
 
+  # µEmu drives S2E, which is built against focal with gcc-9 (libtinfo5, i386 multilib) and does
+  # not build on the 24.04 image above, so it runs in its own container.  The two share the
+  # bind-mounted tool and sample directories, so the harness sees exactly the same paths.
+  uemu:
+    container_name: akiba_uemu
+    image: akiba_uemu_s2e:${UEMU_VERSION:-1.0}
+    build:
+      context: ../..
+      dockerfile: evaluation_framework/docker/Dockerfile.uemu
+    init: true
+    restart: unless-stopped
+    # launch-uEmu.sh runs qemu with -enable-kvm; the container needs the device to start at all
+    devices:
+      - /dev/kvm:/dev/kvm
+    environment:
+      uEmuDIR: /opt/uemu
+      # µEmu's AFL 2.56b aborts on the host's cpufreq governor otherwise
+      AFL_SKIP_CPUFREQ: "1"
+    volumes:
+      - "../../evaluated_tools_and_configurations/tools/uEmu-test:/data/tools/uEmu-test"
+      - "../../evaluation_samples:/data/samples:ro"
+      - "../../evaluation_results:/data/results"
+    working_dir: /data/tools/uEmu-test
+    command: ["sleep", "infinity"]
+
 volumes:
   akiba_state:
   akiba_data:
