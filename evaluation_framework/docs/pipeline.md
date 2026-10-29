@@ -6,8 +6,8 @@ vocabulary, and each configuration below is labelled with the stage it serves:
 | paper stage | configurations | what it does |
 |---|---|---|
 | **Stage 1 — Reconnaissance** | `00b_analyze`, `01_firmxray`, `02_firmline` | recover what is needed to start an emulation: Ghidra pre-analysis (functions, strings), the base address and entry validity (FirmXRay), and a generic firmware analysis (Firmline) |
-| **Stage 2 — Emulation** | `02b_admission` (plus the `FuzzwareGateway` task inside `03`–`05`) | turn the recovered base address into an emulation configuration and decide whether the fuzzer admits the firmware at all |
-| **Stage 3 — Security Testing** | the fuzzing tasks of `03_fuzzware` (FirmXRayOnFuzzware), `03b_p2im` (ConvertFirmToELF → P2IMGateway → P2IMRunner; P²IM as the related-work baseline, run directly), `04_hoedur`, `05_multifuzz` (+ crash replay and statistics) | fuzz each firmware, replay the crashes, collect coverage |
+| **Stage 2 — Emulation** | `02b_admission` (plus the `FuzzwareGateway` task inside `03`–`05`), `03b_p2im` (ConvertFirmToELF → P2IMGateway → P2IMRunner), `03c` (µEmu harness) — the two related-work emulators, run directly | turn the recovered base address into an emulation configuration, decide whether the emulator admits the firmware at all, and run the related-work emulators on the same corpus |
+| **Stage 3 — Security Testing** | the fuzzing tasks of `03_fuzzware` (FirmXRayOnFuzzware, plain and `--dma`), `04_hoedur`, `05_multifuzz` (+ crash replay and statistics) | fuzz each firmware, replay the crashes, collect coverage |
 | **Stage 4 — Diagnosis** | `06_firmrca`, `06b_firmrca_classify` | root-cause analysis of the crash inputs and the classification pass |
 
 `00_import` is not a stage — it puts the firmware into the database before Stage 1 starts, and
@@ -102,9 +102,9 @@ virtualenv - the DMA-capable build the reference server fuzzes with (`venv:
   `firmxray_fuzzware_replay_crashes`;
 * `FuzzwareStat` — coverage statistics → `firmxray_on_fuzzware_stat_results`.
 
-## Stage 03b — P²IM (Stage 3 Security Testing)
+## Stage 03b — P²IM (Stage 2 Emulation)
 
-`03b_p2im.json` runs the P²IM step of Stage 3. It is the only stage that needs an ELF, so it chains
+`03b_p2im.json` runs the P²IM step of Stage 2. It is the only stage that needs an ELF, so it chains
 three modules per firmware: `ConvertFirmToELF` (rebuilds the firmware as an ELF in
 `/data/akiba/binaries/parsed_elfs/<id>.elf`, using `firmxray_results.base_address` as the load
 address; table `convert_elf_results`), `P2IMGateway` (guesses board/MCU and writes the `fuzz.cfg`
@@ -155,9 +155,9 @@ and the runtime image handle all three:
   carries them and the provisioner installs them when a container was created without them.
 Provisioning is `scripts/setup_tools.sh p2im`.
 
-## Stage 03c — µEmu (Stage 3 Security Testing)
+## Stage 03c — µEmu (Stage 2 Emulation)
 
-`scripts/run_uemu_test.sh` runs the µEmu step of Stage 3.  Unlike every other stage it is not a
+`scripts/run_uemu_test.sh` runs the µEmu step of Stage 2.  Unlike every other stage it is not a
 framework config: `uEmu-test` is a self-contained CLI (`pipeline.py`: cfg → kb → fuzz → analyze →
 coverage) and the reference ran it directly, so the stage is a script that `run_pipeline.sh` invokes
 under the `03c` id, and it writes no database table — its output is CSV under `results/uemu_test/`.

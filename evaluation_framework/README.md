@@ -87,7 +87,7 @@ wraps.
   log: `logs/03_03_fuzzware.log`
 - per-firmware work tree: `/data/akiba/binaries/fuzzware_projects/<id>/`
 
-### `03b_p2im` — P²IM fuzzing (Stage 3 Security Testing)
+### `03b_p2im` — P²IM fuzzing (Stage 2 Emulation)
 
 - modules: `ConvertFirmToELF` (rebuilds the firmware as an ELF under `/data/akiba/binaries/parsed_elfs/`
   from `firmxray_results.base_address`; table `convert_elf_results`), `P2IMGateway` (guesses the board
@@ -136,7 +136,7 @@ wraps.
   them itself (via sudo/root) when a container was created without them, as it also creates
   `~/p2im-py38/bin` and verifies the interpreter and the AFL environment
 
-### `03c` — µEmu (Stage 3 Security Testing, related work, run directly)
+### `03c` — µEmu (Stage 2 Emulation, related work, run directly)
 
 - what it runs: `scripts/run_uemu_test.sh`, which drives the `uEmu-test` harness
   (`pipeline.py`: cfg → kb → fuzz → analyze → coverage) over the ELF corpus the 03b ELF pass produced.
