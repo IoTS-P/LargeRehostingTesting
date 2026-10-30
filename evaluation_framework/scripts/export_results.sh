@@ -44,6 +44,29 @@ c_blue "==> exporting instance '$DB_INSTANCE' (port $PORT, owner $OWNER) to $RES
 export PGPASSWORD="${AKIBA_DB_PASSWORD:-akiba}"
 PSQL=(psql -h 127.0.0.1 -p "$PORT" -U "$OWNER" -d "$DB_INSTANCE" -v ON_ERROR_STOP=1 -q -t -A)
 
+# The replay module declares its crash view (firmxray_fuzzware_replay_crashes) over the plain table
+# only, so the DMA branch would export raw JSONB.  Mirror the view over the DMA table when that table
+# exists; CREATE OR REPLACE keeps it idempotent and the export below then picks it up like any other view.
+GDMA_VIEW_SQL="CREATE OR REPLACE VIEW fuzzware_gdma_replay_crashes AS
+SELECT frr.id,
+       (elem.value -> 'path')::text AS path,
+       (elem.value -> 'errMsg')::text AS err_msg,
+       (elem.value -> 'errInInterrupt')::bool AS err_in_interrupt,
+       (elem.value -> 'functionCoverage')::double precision AS func_cov,
+       (elem.value -> 'basicBlockCoverage')::double precision AS basic_block_cov,
+       (elem.value -> 'errRegContext' -> 'pc')::bigint AS pc,
+       (elem.value -> 'errRegContext' -> 'lr')::bigint AS lr
+FROM firmxray_on_fuzzware_gdma_replay_results AS frr
+JOIN jsonb_array_elements(frr.crash_replay_results) AS elem(value) ON true
+ORDER BY frr.id;"
+if "${PSQL[@]}" -tAc "SELECT to_regclass('firmxray_on_fuzzware_gdma_replay_results')" 2>/dev/null | grep -q .; then
+  if "${PSQL[@]}" -c "$GDMA_VIEW_SQL" >/dev/null 2>&1; then
+    c_green "  gdma: view fuzzware_gdma_replay_crashes ready" >&2
+  else
+    c_yellow "  gdma: could not create fuzzware_gdma_replay_crashes (continuing)" >&2
+  fi
+fi
+
 # every base table and view of the public schema
 OBJECTS=$("${PSQL[@]}" -c "SELECT table_name || ' ' || table_type FROM information_schema.tables WHERE table_schema='public' ORDER BY table_type, table_name" 2>/dev/null) \
   || die "cannot connect to the akiba instance database on port $PORT"
@@ -69,6 +92,7 @@ declare -A FILE_FOR=(
   [firmxray_on_fuzzware_gdma_results]="gdma_stage_3.csv"
   [firmxray_on_fuzzware_gdma_replay_results]="gdma_replay_stage_3.csv"
   [firmxray_on_fuzzware_gdma_stat_results]="gdma_statistics_stage_3.csv"
+  [fuzzware_gdma_replay_crashes]="gdma_replay_crashes_stage_3.csv"
   [firmxray_on_fuzzware_stat_results]="fuzzware_statistics_stage_3.csv"
   [firmxray_on_fuzzware_replay_results]="fuzzware_replay_stage_3.csv"
   [firmxray_fuzzware_replay_crashes]="fuzzware_replay_crashes_stage_3.csv"

@@ -136,6 +136,9 @@ where:
   The file is named `<tool>_stage_<N>.csv`: the stage the table belongs to is part of the name, e.g.
   `firmxray_results` is exported as `firmxray_stage_1.csv`, `firmxray_on_fuzzware_results` as
   `fuzzware_stage_3.csv` and `firmxray_on_fuzzware_gdma_results` as `gdma_stage_3.csv`.
+  Before exporting, `export_results.sh` creates (or replaces) the view `fuzzware_gdma_replay_crashes`
+  over `firmxray_on_fuzzware_gdma_replay_results`, because the replay module only declares its crash
+  view over the plain table; that lets both branches export a flat crash list.
   Tables with nothing to publish are not exported at all: `function_finder_results` only records that
   the analysis module ran, `db_backup_tree`, `example_table`, `results` and `processed_binaries` are
   framework book-keeping, `program_initialization_results` and `string_adder_results` only record
@@ -155,7 +158,7 @@ The primary result tables for each stage, and the file each one is exported to:
 |---|---|
 | 1 | `firmxray_results` → `db/firmxray_stage_1.csv`, `firmline_results` → `db/firmline_stage_1.csv`, `convert_elf_results` → `db/convert_elf_stage_1.csv` |
 | 2 | `fuzzware_admission_results` → `db/fuzzware_admission_stage_2.csv`, `hoedur_admission_results` → `db/hoedur_admission_stage_2.csv`, `multifuzz_admission_results` → `db/multifuzz_admission_stage_2.csv`, `p2im_fuzzing_results` → `db/p2im_stage_2.csv` (P²IM, related work), µEmu → `db/uemu_stage_2.csv`, AidFuzzer → `db/aidfuzzer_stage_2.csv` (seed-level detail: `db/{fuzzware,hoedur,multifuzz}_admission_seeds_stage_2.csv`) |
-| 3 | `firmxray_on_fuzzware_results` → `db/fuzzware_stage_3.csv` (statistics: `db/fuzzware_statistics_stage_3.csv`; replay: `db/fuzzware_replay_stage_3.csv`), `firmxray_on_fuzzware_gdma_results` → `db/gdma_stage_3.csv` (the same pipeline with `--dma`, its own stage so the two runs keep separate numbers; its replay and statistics land in `db/gdma_replay_stage_3.csv` and `db/gdma_statistics_stage_3.csv`), `firmxray_fuzzware_replay_crashes` → `db/fuzzware_replay_crashes_stage_3.csv` (view, one row per replayed crash), `hoedur_fuzz_results` → `db/hoedur_stage_3.csv`, `hoedur_statistics_results` → `db/hoedur_statistics_stage_3.csv`, `multifuzz_results` → `db/multifuzz_stage_3.csv` |
+| 3 | `firmxray_on_fuzzware_results` → `db/fuzzware_stage_3.csv` (statistics: `db/fuzzware_statistics_stage_3.csv`; replay: `db/fuzzware_replay_stage_3.csv`), `firmxray_on_fuzzware_gdma_results` → `db/gdma_stage_3.csv` (the same pipeline with `--dma`, its own stage so the two runs keep separate numbers; its replay and statistics land in `db/gdma_replay_stage_3.csv` and `db/gdma_statistics_stage_3.csv`, and the same crash view is built over the DMA table as `db/gdma_replay_crashes_stage_3.csv`), `firmxray_fuzzware_replay_crashes` → `db/fuzzware_replay_crashes_stage_3.csv` (view, one row per replayed crash), `hoedur_fuzz_results` → `db/hoedur_stage_3.csv`, `hoedur_statistics_results` → `db/hoedur_statistics_stage_3.csv`, `multifuzz_results` → `db/multifuzz_stage_3.csv` |
 | 4 | `firmrca_results` → `db/firmrca_stage_4.csv`, `firmrca_classified_results` → `db/firmrca_classified_stage_4.csv`, `firmrca_sampling` → `db/firmrca_sampling_stage_4.csv` |
 
 Per-firmware project trees can additionally be exported with:
