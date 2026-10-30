@@ -67,6 +67,8 @@ declare -A FILE_FOR=(
   # stage 3 - security testing
   [firmxray_on_fuzzware_results]="fuzzware_stage_3.csv"
   [firmxray_on_fuzzware_gdma_results]="gdma_stage_3.csv"
+  [firmxray_on_fuzzware_gdma_replay_results]="gdma_replay_stage_3.csv"
+  [firmxray_on_fuzzware_gdma_stat_results]="gdma_statistics_stage_3.csv"
   [firmxray_on_fuzzware_stat_results]="fuzzware_statistics_stage_3.csv"
   [firmxray_on_fuzzware_replay_results]="fuzzware_replay_stage_3.csv"
   [firmxray_fuzzware_replay_crashes]="fuzzware_replay_crashes_stage_3.csv"
