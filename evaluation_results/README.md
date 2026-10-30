@@ -5,11 +5,7 @@ Everything the container produces is collected here. The directory is on the hos
 
 ```
 results/
-├── reconnaissance_stage_1.csv     stage 1 E1, one row per firmware (base address, entry_valid, …)
-├── emulation_stage_2.csv          stage 2 E2, the per-tool seed-admission verdicts
-├── security_testing_stage_3.csv   stage 3 E3, coverage / crashes / hangs per tool
-├── diagnosis_stage_4.csv          stage 4 E4, FirmRCA crash triage
-├── db/                      one CSV per database table and view of akiba-instance
+├── db/                      one CSV per result table, named <name>_stage_<N>.csv
 │   ├── binaries.csv         imported firmware (path, arch, format, md5, …)
 │   ├── firmxray_stage_1.csv       base address + entry validity per firmware
 │   ├── fuzzware_stage_3.csv       coverage / crashes per firmware
@@ -33,10 +29,11 @@ results/
 └── export_manifest.txt      when the export ran and which objects it contained
 ```
 
-The `*_stage_<N>.csv` files under `db/` are the raw per-table export: `export_results.sh` names each
-file after the stage its table belongs to (`firmxray_results` -> `firmxray_stage_1.csv`,
-`firmxray_on_fuzzware_results` -> `fuzzware_stage_3.csv`), and only those files are tracked.
-The four `*_stage_<N>.csv` files one level up are the hand-reviewed summaries of the paper numbers.
+Every file under `db/` is the raw per-table export: `export_results.sh` names each one after the stage
+its table belongs to (`firmxray_results` -> `firmxray_stage_1.csv`, `p2im_fuzzing_results` ->
+`p2im_stage_2.csv`, `firmxray_on_fuzzware_results` -> `fuzzware_stage_3.csv`), and only those files are
+tracked.  There is no separate per-stage summary table: a stage's numbers are spread over the tables it
+writes, and the paper quotes them from there.
 
 The export is a plain snapshot, not a diff: `scripts/export_results.sh` re-writes
 `db/*.csv` from the live database, and `scripts/run_pipeline.sh` calls it after

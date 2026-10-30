@@ -189,9 +189,9 @@ Our artifact contains the framework, tool snapshots, evaluation data, and detail
   run a single stage, a single module or a single firmware (`docs/pipeline.md` documents the stages
   and the tables they write).
 - `evaluation_samples/` — firmware samples used in the evaluation, provided separately through the reviewer-only Google Drive link (see A.3.5).
-- `evaluation_results/` — per-stage results and intermediate outputs: the four reviewed tables
-  `reconnaissance_stage_1.csv`, `emulation_stage_2.csv`, `security_testing_stage_3.csv` and
-  `diagnosis_stage_4.csv`, plus the raw `db/` export.
+- `evaluation_results/` — the pipeline's output.  `db/` holds one CSV per result table, named after
+  the stage it belongs to (`firmxray_stage_1.csv`, `p2im_stage_2.csv`, `fuzzware_stage_3.csv`, …);
+  the per-firmware project trees, logs and the export manifest sit next to it.
 
 **2. Evaluated Tools and Configurations.**  
 `evaluated_tools_and_configurations/` contains snapshots of the evaluated tools, pinned to the versions used in our study, together with the required build instructions, configurations, and local patches. These include FirmXRay, Firmline, Fuzzware, GDMA, Hoedur, MultiFuzz, FirmRCA, P²IM, μEmu, DICE, AidFuzzer, and AIM. Detailed commit IDs and modifications are documented in the corresponding README files.
@@ -468,14 +468,14 @@ evaluation_framework/scripts/run_pipeline.sh --fuzz-time 2m   # 01 → 03 → 04
 
 Step-by-step documentation — the tool each step drives, the command that starts it, the table it
 writes and the log it leaves — lives in **`evaluation_framework/README.md`, section "Step by step"**.
-The mapping to the paper's stages, its experiments, and the canonical result files:
+The mapping to the paper's stages, its experiments, and the tables they write:
 
-| paper stage | experiment | steps (configs) | result tables | canonical results |
-|---|---|---|---|---|
-| Stage 1 — Reconnaissance | E1: recovery and verification of base addresses and entry points | `00_import`, `00b_analyze`, `01_firmxray`, `02_firmline` | `firmxray_results`, `firmline_results` | `evaluation_results/reconnaissance_stage_1.csv` |
-| Stage 2 — Emulation | E2: whether firmware passing reconnaissance can be initialized by the emulation tools | `02b_admission`, the `03b_p2im` passes, the `03c` µEmu harness and the `03e` AidFuzzer probe (all related work, run directly on the corpus), plus the `FuzzwareGateway` task of `03`–`05` | `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results`, `p2im_fuzzing_results`; `evaluation_results/aidfuzzer_test/status.csv` | `evaluation_results/emulation_stage_2.csv` |
-| Stage 3 — Security Testing | E3: fuzzing applicability and effectiveness (coverage, crashes, hangs) | fuzzing tasks of `03_fuzzware` (plain and with `--dma`), `04_hoedur`, `05_multifuzz`, plus crash replay and statistics | `firmxray_on_fuzzware_results`, `firmxray_on_fuzzware_gdma_results`, `firmxray_fuzzware_replay_crashes`, `hoedur_fuzz_results`, `hoedur_statistics_results`, `multifuzz_results`, `firmxray_on_fuzzware_gdma_replay_results`, `firmxray_on_fuzzware_gdma_stat_results` | `evaluation_results/security_testing_stage_3.csv` |
-| Stage 4 — Diagnosis | E4: post-fuzzing diagnosis with FirmRCA and manual validation | `06_firmrca`, `06b_firmrca_classify` | `firmrca_results`, `firmrca_classified_results` | `evaluation_results/diagnosis_stage_4.csv` |
+| paper stage | experiment | steps (configs) | result tables |
+|---|---|---|---|
+| Stage 1 — Reconnaissance | E1: recovery and verification of base addresses and entry points | `00_import`, `00b_analyze`, `01_firmxray`, `02_firmline` | `firmxray_results`, `firmline_results` |
+| Stage 2 — Emulation | E2: whether firmware passing reconnaissance can be initialized by the emulation tools | `02b_admission`, the `03b_p2im` passes, the `03c` µEmu harness and the `03e` AidFuzzer probe (all related work, run directly on the corpus), plus the `FuzzwareGateway` task of `03`–`05` | `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results`, `p2im_fuzzing_results`; `evaluation_results/aidfuzzer_test/status.csv` |
+| Stage 3 — Security Testing | E3: fuzzing applicability and effectiveness (coverage, crashes, hangs) | fuzzing tasks of `03_fuzzware` (plain and with `--dma`), `04_hoedur`, `05_multifuzz`, plus crash replay and statistics | `firmxray_on_fuzzware_results`, `firmxray_on_fuzzware_gdma_results`, `firmxray_fuzzware_replay_crashes`, `hoedur_fuzz_results`, `hoedur_statistics_results`, `multifuzz_results`, `firmxray_on_fuzzware_gdma_replay_results`, `firmxray_on_fuzzware_gdma_stat_results` |
+| Stage 4 — Diagnosis | E4: post-fuzzing diagnosis with FirmRCA and manual validation | `06_firmrca`, `06b_firmrca_classify` | `firmrca_results`, `firmrca_classified_results` |
 
 Expected effort, taken from the artifact appendix and included in the single pipeline run: E1 ≈ 10
 human-minutes + 10 compute-hours, E2 ≈ 10 human-minutes + 7 compute-hours, E3 ≈ 20 human-minutes +
@@ -493,7 +493,7 @@ i.e. ≈17,751 fuzzing instance-hours across the four campaigns. The canonical r
 1,580 of the 4,571 firmware samples (34.5%) can be successfully fuzzed by at least one evaluated
 tool, with an average code coverage of ≈10%; the artifact also reports the corresponding crash and
 hang results. Exact coverage and crash counts vary between reruns because fuzzing is
-nondeterministic — the supplied `*_stage_*.csv` files are the canonical comparison.
+nondeterministic — the exports under `evaluation_results/db/` are the canonical comparison.
 
 Results are exported with:
 
@@ -736,5 +736,5 @@ Pipeline stage configs are passed to the framework with a JSON pointer — `./bi
 
 ## A.9 Notes on Discrepancies
 
-- The published evaluation results (`evaluation_results/*_stage_*.csv`) are the canonical outputs. Re-running on the same corpus should reproduce them qualitatively (same base addresses, order-of-magnitude crash counts, problem categories), but exact values may differ due to timing-dependent fuzzing and Ghidra version differences.
+- The published evaluation results (`evaluation_results/db/*_stage_*.csv`) are the canonical outputs. Re-running on the same corpus should reproduce them qualitatively (same base addresses, order-of-magnitude crash counts, problem categories), but exact values may differ due to timing-dependent fuzzing and Ghidra version differences.
 - FirmRCA results (Stage 4 — Diagnosis) depend on specific crash inputs from fuzzing stages; different crash sets produce different FirmRCA outputs. The provided `empirical_study/firmrca_analysis/` captures one run for reproducibility.

@@ -12,8 +12,8 @@
 #   evaluation_framework/scripts/                     ->  /opt/rehosting/scripts  (ro)
 #   evaluation_framework/framework/                   ->  /opt/rehosting/framework (ro)
 #
-# From those trees only the published per-stage result tables
-# (the per-stage result tables, *_stage_*.csv) and the READMEs are tracked.
+# From those trees only the per-table exports under evaluation_results/db
+# (named <name>_stage_<N>.csv) and the READMEs are tracked.
 # =============================================================================
 
 # --- sample corpus: hosted on Google Drive, see README.md A.3.5 ---------------
@@ -27,7 +27,6 @@ evaluation_samples/
 # exported per-firmware trees (artifacts/) and the export manifest
 evaluation_results/*
 !evaluation_results/README.md
-!evaluation_results/*_stage_*.csv
 # the raw per-table export: only the files the pipeline names <name>_stage_<N>.csv are tracked
 !evaluation_results/db/
 !evaluation_results/db/*_stage_*.csv

@@ -22,8 +22,8 @@ Scope and provenance:
 - Tools: FirmXRay (base-address inference), Fuzzware and its DMA branch (GDMA),
   MultiFuzz, Hoedur (fuzzing) and FirmRCA (root-cause candidates), driven by the
   akiba 3.1.2 pipeline (`evaluation_framework/`).
-- Published numbers: the per-stage result tables are `evaluation_results/<name>_stage_<N>.csv`
-  (e.g. `emulation_stage_2.csv`);
+- Published numbers: the result tables are `evaluation_results/db/<name>_stage_<N>.csv`
+  (e.g. `fuzzware_admission_stage_2.csv`, `fuzzware_stage_3.csv`);
   the categories below quote database fields (`firmxray_results`, `firmxray_on_fuzzware_*`,
   `hoedur_*`, `multifuzz_results`, `firmrca_results`) by name so each claim can be
   re-derived from a run.
