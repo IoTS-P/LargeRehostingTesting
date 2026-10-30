@@ -78,7 +78,6 @@ declare -A FILE_FOR=(
   # stage 1 - reconnaissance
   [firmxray_results]="firmxray_stage_1.csv"
   [firmline_results]="firmline_stage_1.csv"
-  [convert_elf_results]="convert_elf_stage_1.csv"
   # stage 2 - emulation admission
   [fuzzware_admission_results]="fuzzware_admission_stage_2.csv"
   [hoedur_admission_results]="hoedur_admission_stage_2.csv"
@@ -86,6 +85,7 @@ declare -A FILE_FOR=(
   [fuzzware_admission_checks_v2]="fuzzware_admission_seeds_stage_2.csv"
   [hoedur_admission_checks_v2]="hoedur_admission_seeds_stage_2.csv"
   [multifuzz_admission_checks_v2]="multifuzz_admission_seeds_stage_2.csv"
+  [convert_elf_results]="convert_elf_stage_2.csv"
   [p2im_fuzzing_results]="p2im_stage_2.csv"
   # stage 3 - security testing
   [firmxray_on_fuzzware_results]="fuzzware_stage_3.csv"
