@@ -1,0 +1,4 @@
+id,kb_status,kb_file,kb_elapsed_s,end_type,duration_min,total_bbl,covered,pct,result,details
+3,有KB,3.elf-round1-state200-tbnum248_KB.dat,2.4,killed,2.7,7668,279,3.64,提前退出,fuzzer:dry-run种子crash
+3389,,,,,,,,,提前退出,fuzzer:dry-run种子crash
+12255,,,,,,7300,710,9.73,提前退出,fuzzer:dry-run种子crash

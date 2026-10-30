@@ -173,6 +173,30 @@ fi
 
 # ---------------------------------------------------------------- 4. results
 cp -f "$WORK/result/$BATCH"/*.csv "$OUT/" 2>/dev/null || true
+
+# one row per firmware for the stage-2 table: knowledge base, fuzz outcome and coverage side by side
+mkdir -p "$RESULTS_DIR/db"
+python3 - "$WORK/result/$BATCH" "$RESULTS_DIR/db/uemu_stage_2.csv" <<'PY'
+import csv, os, sys
+src, out = sys.argv[1], sys.argv[2]
+def load(name):
+    p = os.path.join(src, name)
+    if not os.path.exists(p):
+        return {}
+    return {r.get("fw"): r for r in csv.DictReader(open(p, newline=""))}
+kb, fz, cov, res = load("kb_status.csv"), load("fuzz_status.csv"), load("coverage.csv"), load("results.csv")
+ids = sorted({*kb, *fz, *cov, *res}, key=lambda x: int(x) if str(x).isdigit() else str(x))
+cols = ["id", "kb_status", "kb_file", "kb_elapsed_s", "end_type", "duration_min",
+        "total_bbl", "covered", "pct", "result", "details"]
+with open(out, "w", newline="") as f:
+    w = csv.writer(f); w.writerow(cols)
+    for i in ids:
+        k, z, c, r = kb.get(i, {}), fz.get(i, {}), cov.get(i, {}), res.get(i, {})
+        w.writerow([i, k.get("status", ""), k.get("kb_file", ""), k.get("elapsed_s", ""),
+                    z.get("end_type", ""), z.get("duration_min", ""), c.get("total_bbl", ""),
+                    c.get("covered", ""), c.get("pct", ""), r.get("result", ""), r.get("details", "")])
+print("  wrote %s (%d rows)" % (out, len(ids)))
+PY
 mkdir -p "$OUT/logs"
 cp -f "$WORK/result/$BATCH"/logs/* "$OUT/logs/" 2>/dev/null || true
 echo

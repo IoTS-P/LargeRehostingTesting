@@ -55,8 +55,6 @@ declare -A FILE_FOR=(
   # stage 1 - reconnaissance
   [firmxray_results]="firmxray_stage_1.csv"
   [firmline_results]="firmline_stage_1.csv"
-  [program_initialization_results]="program_initialization_stage_1.csv"
-  [string_adder_results]="string_adder_stage_1.csv"
   [convert_elf_results]="convert_elf_stage_1.csv"
   # stage 2 - emulation admission
   [fuzzware_admission_results]="fuzzware_admission_stage_2.csv"
@@ -88,6 +86,8 @@ declare -A FILE_FOR=(
 # pipeline; only the export skips them.
 declare -A SKIP=(
   [function_finder_results]=1
+  [program_initialization_results]=1   # module bookkeeping only, no result columns
+  [string_adder_results]=1             # same
   [db_backup_tree]=1
   [example_table]=1
   [results]=1

@@ -86,7 +86,8 @@ else
   done
 fi
 
-rows="$OUT/status.csv"
+mkdir -p "$RESULTS_DIR/db"
+rows="$RESULTS_DIR/db/aidfuzzer_stage_2.csv"
 echo "id,result,detail,log" > "$rows"
 started=0; total=0
 for id in $ids; do
@@ -128,6 +129,6 @@ PY
 done
 
 c_blue "==> aidfuzzer feasibility: $started/$total firmware(s) reached a running simulator"
-echo "  status: $rows"
+echo "  stage-2 table: $rows"
 [ "$started" -gt 0 ] || c_yellow "    none started — expected: AidFuzzer does not bring our images up"
 exit 0

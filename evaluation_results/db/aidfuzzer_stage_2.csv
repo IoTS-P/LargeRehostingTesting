@@ -1,0 +1,2 @@
+id,result,detail,log
+3,no-fork-server,fork server is not up got EXIT_CTL_TERMINATE pc: 0 lr:0,/data/results/generated/aidfuzzer_test/3/run.log
