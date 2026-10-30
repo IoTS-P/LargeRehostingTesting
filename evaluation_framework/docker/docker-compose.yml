@@ -70,6 +70,7 @@ services:
       - "../../evaluated_tools_and_configurations/tools/p2im:/data/tools/p2im"
       - "../../evaluated_tools_and_configurations/tools/uEmu:/data/tools/uEmu"
       - "../../evaluated_tools_and_configurations/tools/uEmu-test:/data/tools/uEmu-test"
+      - "../../evaluated_tools_and_configurations/tools/aidfuzzer:/data/tools/aidfuzzer"
       - "../../evaluation_samples:/data/samples"
       - "../../evaluation_results:/data/results"
       - "../../evaluation_framework/pipeline_configs:/data/pipelines:ro"

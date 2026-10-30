@@ -6,7 +6,7 @@ vocabulary, and each configuration below is labelled with the stage it serves:
 | paper stage | configurations | what it does |
 |---|---|---|
 | **Stage 1 — Reconnaissance** | `00b_analyze`, `01_firmxray`, `02_firmline` | recover what is needed to start an emulation: Ghidra pre-analysis (functions, strings), the base address and entry validity (FirmXRay), and a generic firmware analysis (Firmline) |
-| **Stage 2 — Emulation** | `02b_admission` (plus the `FuzzwareGateway` task inside `03`–`05`), `03b_p2im` (ConvertFirmToELF → P2IMGateway → P2IMRunner), `03c` (µEmu harness) — the two related-work emulators, run directly | turn the recovered base address into an emulation configuration, decide whether the emulator admits the firmware at all, and run the related-work emulators on the same corpus |
+| **Stage 2 — Emulation** | `02b_admission` (plus the `FuzzwareGateway` task inside `03`–`05`), `03b_p2im` (ConvertFirmToELF → P2IMGateway → P2IMRunner), `03c` (µEmu harness), `03e` (AidFuzzer feasibility probe) — the two related-work emulators, run directly | turn the recovered base address into an emulation configuration, decide whether the emulator admits the firmware at all, and run the related-work emulators on the same corpus |
 | **Stage 3 — Security Testing** | the fuzzing tasks of `03_fuzzware` (FirmXRayOnFuzzware, plain and `--dma`), `04_hoedur`, `05_multifuzz` (+ crash replay and statistics) | fuzz each firmware, replay the crashes, collect coverage |
 | **Stage 4 — Diagnosis** | `06_firmrca`, `06b_firmrca_classify` | root-cause analysis of the crash inputs and the classification pass |
 
@@ -176,6 +176,15 @@ probe budget, the tool's own message is what the run records, and `analyze`/`cov
 result (`results.csv`: 正常fuzz / 提前退出 / 卡死).  The dataset-level verdict comes from the harness's
 own run on a µEmu host; see `README.md` (stage `03c`) and `provenance.md` for that record and for the
 three interpreter traps this stage shares with the P²IM one.
+
+## Stage 03e — AidFuzzer feasibility probe (Stage 2 Emulation)
+
+`scripts/run_aidfuzzer_test.sh` drives AidFuzzer directly (`iofuzz fuzz <config.yml> ./simulator -corpus
+<dir>`) and records how it stops.  The tool parses our fuzzware config and sets up the memory map, then
+waits for a fork server that our images never raise, so the row reads `no-fork-server
+(fork server is not up ... EXIT_CTL_TERMINATE pc: 0 lr:0)`.  `--build` compiles qemu-7.2.0
+(`--target-list=arm-softmmu --enable-modules`, `ninja`) and `framework/scipt/compile.sh`; results go to
+`results/aidfuzzer_test/status.csv`.
 
 ## Stage 04 — Hoedur (Stage 3 Security Testing)
 

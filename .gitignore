@@ -31,6 +31,8 @@ evaluation_results/*
 # the raw per-table export: only the files the pipeline names <name>_stage_<N>.csv are tracked
 !evaluation_results/db/
 !evaluation_results/db/*_stage_*.csv
+!evaluation_results/aidfuzzer_test/
+!evaluation_results/aidfuzzer_test/*.csv
 
 # --- evaluation_framework: build products of the framework and the modules ----
 evaluation_framework/framework/build/

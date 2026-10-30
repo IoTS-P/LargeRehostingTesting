@@ -30,6 +30,7 @@ STAGES=(
   "03b|03b_p2im_elf.json|Stage 2 Emulation — P²IM pass 1 (related work): rebuild the ELF (threads: 1)"
   "03b|03b_p2im.json|Stage 2 Emulation — P²IM pass 2 (related work): corpus run directly, expected not to emulate"
   "03c|run_uemu_test.sh|Stage 2 Emulation — µEmu (related work, run directly): uEmu-test harness over the corpus, expected not to emulate"
+  "03e|run_aidfuzzer_test.sh|Stage 2 Emulation — AidFuzzer (related work, run directly): feasibility probe, expected not to start"
   "04|04_hoedur.json|Stage 3 Security Testing — Hoedur fuzzing + statistics"
   "05|05_multifuzz.json|Stage 3 Security Testing — MultiFuzz fuzzing + replay"
   "06|06_firmrca.json|Stage 4 Diagnosis — FirmRCA root-cause analysis (classify pass 1)"

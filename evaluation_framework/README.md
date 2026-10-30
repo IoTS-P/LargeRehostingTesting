@@ -171,6 +171,18 @@ wraps.
   exposed as `python3` on PATH.  `scripts/run_uemu_test.sh` picks the first qualifying interpreter and
   does exactly that; `setup_tools.sh uemu` installs the two modules into it.
 
+### `03e` — AidFuzzer feasibility probe (Stage 2 Emulation, related work, run directly)
+
+- what it runs: `scripts/run_aidfuzzer_test.sh`.  There is no akiba module and no database: the script
+  drives the tool's own `iofuzz fuzz <config.yml> ./simulator -corpus <dir>` over the corpus.
+- why a probe: AidFuzzer parses our fuzzware config (memory map and all) but its simulator waits for a
+  fork server that the firmware has to raise; our images never get there, so the recorded outcome is
+  `fork server is not up ... EXIT_CTL_TERMINATE pc: 0 lr:0`.  That is the paper's related-work finding.
+- build: the submodule is in `UNFETCHED_TOOLS`; `--build` builds qemu-7.2.0
+  (`--target-list=arm-softmmu --enable-modules`, `ninja`) and `framework/scipt/compile.sh`, which needs
+  `clipp.h` in `framework/header/` (the script fetches it) and `libfdt`/`libglib` at runtime.
+- results: `results/aidfuzzer_test/status.csv` (one row per firmware) · logs: `results/generated/aidfuzzer_test/<id>/run.log`
+
 ### `04_hoedur` — Hoedur fuzzing (Stage 3)
 
 - modules: `FuzzwareGateway`, `HoedurFuzz`, `HoedurStatistics`

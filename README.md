@@ -469,7 +469,7 @@ The mapping to the paper's stages, its experiments, and the canonical result fil
 | paper stage | experiment | steps (configs) | result tables | canonical results |
 |---|---|---|---|---|
 | Stage 1 — Reconnaissance | E1: recovery and verification of base addresses and entry points | `00_import`, `00b_analyze`, `01_firmxray`, `02_firmline` | `firmxray_results`, `firmline_results` | `evaluation_results/reconnaissance_stage_1.csv` |
-| Stage 2 — Emulation | E2: whether firmware passing reconnaissance can be initialized by the emulation tools | `02b_admission`, the `03b_p2im` passes and the `03c` µEmu harness (both related work, run directly on the corpus), plus the `FuzzwareGateway` task of `03`–`05` | `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results`, `p2im_fuzzing_results` | `evaluation_results/emulation_stage_2.csv` |
+| Stage 2 — Emulation | E2: whether firmware passing reconnaissance can be initialized by the emulation tools | `02b_admission`, the `03b_p2im` passes, the `03c` µEmu harness and the `03e` AidFuzzer probe (all related work, run directly on the corpus), plus the `FuzzwareGateway` task of `03`–`05` | `fuzzware_admission_results`, `hoedur_admission_results`, `multifuzz_admission_results`, `p2im_fuzzing_results`; `evaluation_results/aidfuzzer_test/status.csv` | `evaluation_results/emulation_stage_2.csv` |
 | Stage 3 — Security Testing | E3: fuzzing applicability and effectiveness (coverage, crashes, hangs) | fuzzing tasks of `03_fuzzware` (plain and with `--dma`), `04_hoedur`, `05_multifuzz`, plus crash replay and statistics | `firmxray_on_fuzzware_results`, `firmxray_on_fuzzware_gdma_results`, `firmxray_fuzzware_replay_crashes`, `hoedur_fuzz_results`, `hoedur_statistics_results`, `multifuzz_results` | `evaluation_results/security_testing_stage_3.csv` |
 | Stage 4 — Diagnosis | E4: post-fuzzing diagnosis with FirmRCA and manual validation | `06_firmrca`, `06b_firmrca_classify` | `firmrca_results`, `firmrca_classified_results` | `evaluation_results/diagnosis_stage_4.csv` |
 
@@ -562,6 +562,23 @@ docker exec -e AFL_SKIP_CPUFREQ=1 akiba_uemu bash -lc \
   'cd /data/tools/uEmu-test && uEmuDIR=/opt/uemu python3 pipeline.py fuzz --batch smoke --elfs 3 \
      --seed testcases/seed_alternating.bin --timeout 180'
 ```
+
+### AidFuzzer: a feasibility probe, not a stage
+
+AidFuzzer is the paper's other related-work baseline and it is expected **not** to bring our images up,
+so `03e` (`scripts/run_aidfuzzer_test.sh`, Stage 2) records how it stops rather than a fuzzing result.
+It reads a fuzzware-style config, starts its own qemu fork (`libqemu-system-arm.so`) and waits for a fork
+server the firmware has to raise; on sample 3 the simulator exits immediately with
+
+```
+fork server is not up got EXIT_CTL_TERMINATE pc: 0 lr:0
+```
+
+The tool tree is a submodule listed in `setup.sh`'s `UNFETCHED_TOOLS`; `--build` builds qemu
+(`--target-list=arm-softmmu --enable-modules`, then `ninja`) and `framework/scipt/compile.sh`
+(which needs `clipp.h` in `framework/header/`), and the run writes one row per firmware to
+`evaluation_results/aidfuzzer_test/status.csv`.  Built and measured once here: qemu and the binaries
+compile, the config parses, and 0 of 1 firmware reached a running simulator.
 
 Both containers bind-mount `evaluated_tools_and_configurations/tools/uEmu-test`, `evaluation_samples`
 and `evaluation_results`, so the harness and the pipeline see the same paths and results stay in the
