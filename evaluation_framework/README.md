@@ -199,16 +199,24 @@ wraps.
 
 ### `06_firmrca` / `06b_firmrca_classify` — root-cause analysis (Stage 4 Diagnosis)
 
-- module: `FirmRCA` → `/data/tools/FirmRCA`; pass 1 selects the replayed crash inputs with
-  `basic_block_cov >= 0.1`, pass 2 (`classifiedMode: true`) classifies what pass 1 selected
+- module: `FirmRCA` → `/data/tools/FirmRCA`.  The two passes read different input sets:
+  - **pass 1** (`06_firmrca`, `classifiedMode: false`) runs FirmRCA on **every** replayed crash of the
+    firmware (`getAllCrashesPath` of its fuzzware project) — no coverage threshold — and stores
+    `input_id_map` plus the per-input result in `firmrca_results`.
+  - **pass 2** (`06b_firmrca_classify`, `classifiedMode: true`) reads `classifiedMode`'s
+    `classifySource` (`firmrca_classified_replays.paths`).  The module's own `CLASSIFY_VIEW_SQL` builds
+    that view as one crash per `(id, pc, lr)` with `basic_block_cov >= 0.1`, and `filterInputs()` keeps
+    at most five per firmware.  If the import is empty it falls back to the first five replay crashes,
+    which is *not* filtered by coverage — check the log line `classify inputs for firmware …` to see
+    which path was taken.
 - writes: `firmrca_results`, `firmrca_classified_results` (view `firmrca_classified_replays`) ·
   logs: `logs/06_06_firmrca.log`, `logs/06b_06b_firmrca_classify.log`
-- when no crash input reaches the 0.1 threshold the stage stops with
-  `Empty query results, quit immediately` — a valid outcome, not a failure
+- when a firmware has no replayed crash at all, the stage logs `No input file found` and moves on; an
+  empty classified selection stops with `Empty query results, quit immediately` — both valid outcomes
 - **reference only.** The stock module was written to lift the **cov > 0.2** crashes and run
   FirmRCA on those; the paper's 0.1 selection is an order of magnitude larger than that path was
   built for, and its classify pass expects an input table (`firmrca_classified_replays`, `(id, paths)`)
-  that the authors fill outside these configs. The artifact therefore performs the 0.1 sampling with
+  that the framework fills from the view above. The artifact therefore performs the 0.1 sampling with
   `scripts/firmrca_sampling.py`, which drives the same two steps — dataset generation through
   FirmRCA's **own** fuzzware harness, then `reversenolog` — and writes
   `evaluation_results/db/firmrca_sampling.csv`
