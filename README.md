@@ -24,154 +24,6 @@ If you use this code or data in your research, please cite our paper:
 
 ---
 
-## Scaled-Down Experiment: 20 Firmware Images
-
-The full evaluation analyzes all 4,571 firmware images across four stages. Reproducing the complete campaign takes weeks. To make artifact evaluation practical, we provide a scaled-down experiment using 20 firmware images.
-
-The scaled-down experiment executes the **same four-stage pipeline**, with the same tool versions, configurations, analysis logic, fuzzing budget, and output format as the full evaluation. Only the number of evaluated firmware images is reduced. It is therefore intended to validate the **functionality and end-to-end reproducibility** of the artifact rather than reproduce the population-level statistics obtained from all 4,571 images.
-
-### Scaled-down Sample Selection
-
-We randomly select 20 firmware images from the firmware that passes the admission tests of all three fuzzing tools (Fuzzware, Hoedur, and MultiFuzz).
-
-The default 20 firmware IDs are:
-
-```text
-209 274 1330 15756 2669 3412 2974 12299 3480 6625
-2651 7883 16868 1748 11115 11990 2442 509 3141 2863
-```
-
-The selection can be customized as follows:
-
-```bash
-# Evaluate specific firmware IDs
-evaluation_framework/scripts/quickstart.sh --samples 5,815,18853
-```
-
-### Preparation
-
-The scaled-down experiment uses the same software environment and tool versions described in the artifact requirements. It requires Docker with Compose, Python 3, and sufficient disk space for the container, firmware samples, intermediate files, and fuzzing outputs.
-
-Clone the artifact repository:
-
-```bash
-git clone https://github.com/IoTS-P/LargeRehostingTesting.git
-cd LargeRehostingTesting
-```
-
-The firmware corpus used in our evaluation is provided separately to artifact reviewers because of copyright restrictions. Download the reviewer-only corpus with:
-
-```bash
-evaluation_framework/scripts/fetch_samples_gdrive.sh \
-    <google-drive-url>
-```
-
-The script downloads, extracts, and places the dataset under `evaluation_samples/`.
-
-Alternatively, reviewers can manually download the `evaluation_samples/` package from the reviewer-only Google Drive location and extract it into the repository root. The directory contains:
-
-```text
-evaluation_samples/
-├── firmware/<id>.bin
-├── offsets/<id>.json
-├── stripped_ids.txt
-├── original_md5.csv
-├── restore_original.py
-└── scripts/verify_corpus.py
-```
-
-Here:
-
-- `firmware/<id>.bin` contains the 4,571 evaluated firmware images;
-- `offsets/<id>.json` records segment mappings for stripped images;
-- `stripped_ids.txt` identifies firmware stored in stripped form;
-- `original_md5.csv` records the original firmware IDs, MD5 hashes, and sizes;
-- `restore_original.py` reconstructs stripped firmware images; and
-- `scripts/verify_corpus.py` verifies dataset integrity.
-
-### Execution
-
-Run the scaled-down experiment with:
-
-```bash
-evaluation_framework/scripts/quickstart.sh
-```
-
-`quickstart.sh` automatically:
-
-1. builds the evaluation container if needed;
-2. starts the container and database services;
-3. provisions the evaluated tools;
-4. selects and imports the 20 firmware images;
-5. executes all four stages in dependency order;
-6. performs the fuzzing campaigns; and
-7. exports and summarizes the evaluation results.
-
-
-The scaled-down experiment retains the **one-hour-per-firmware fuzzing budget** used in the paper. Firmware instances are executed concurrently. With only 20 firmware images, the experiment is designed to complete within the one-day AEC evaluation budget.
-
-### Results and Validation
-
-All outputs are written under:
-
-```text
-evaluation_results/
-```
-
-The main outputs are:
-
-```text
-evaluation_results/
-├── db/*.csv
-├── logs/*.log
-├── generated/
-└── export_manifest.txt
-```
-
-where:
-
-- `db/*.csv` contains the exported result tables. `export_results.sh` runs
-  `\copy (SELECT * FROM "<name>") TO 'db/<file>' WITH (FORMAT csv, HEADER true)` for every table and view
-  of the `public` schema, so a file is a straight dump of its table — no columns are renamed or merged.
-  The file is named `<tool>_stage_<N>.csv`: the stage the table belongs to is part of the name, e.g.
-  `firmxray_results` is exported as `firmxray_stage_1.csv`, `firmxray_on_fuzzware_results` as
-  `fuzzware_stage_3.csv` and `firmxray_on_fuzzware_gdma_results` as `gdma_stage_3.csv`.
-  Before exporting, `export_results.sh` creates (or replaces) the view `fuzzware_gdma_replay_crashes`
-  over `firmxray_on_fuzzware_gdma_replay_results`, because the replay module only declares its crash
-  view over the plain table; that lets both branches export a flat crash list.
-  Tables with nothing to publish are not exported at all: `function_finder_results` only records that
-  the analysis module ran, `db_backup_tree`, `example_table`, `results` and `processed_binaries` are
-  framework book-keeping, `program_initialization_results` and `string_adder_results` only record
-  that those modules ran, and `firmrca_classified_replays` is only the helper view the second
-  FirmRCA pass selects from.  `hoedur_replay_data` is exported: it lists one row per crash entry
-  that Hoedur recorded, so it is only as populated as the fuzzing corpus was.  The import tables
-  (`binaries`, `using_binaries`) belong to no stage and keep their own names. `export_manifest.txt` lists the files a given export produced.
-  The four `*_stage_<N>.csv` files directly under `evaluation_results/` are the hand-reviewed summaries
-  built from these tables; they are not produced by `export_results.sh`.
-- `logs/*.log` contains the execution logs for each pipeline stage, including setup/import logs such as 00_import.log.
-- `generated/` contains runtime-generated files, primarily the firmware import lists and pipeline configurations used for the current run.
-- `export_manifest.txt` lists the names of the result CSV files exported to db/.
-
-The primary result tables for each stage, and the file each one is exported to:
-
-| stage | table → exported file |
-|---|---|
-| 1 | `firmxray_results` → `db/firmxray_stage_1.csv`, `firmline_results` → `db/firmline_stage_1.csv` |
-| 2 | `fuzzware_admission_results` → `db/fuzzware_admission_stage_2.csv`, `hoedur_admission_results` → `db/hoedur_admission_stage_2.csv`, `multifuzz_admission_results` → `db/multifuzz_admission_stage_2.csv`, `convert_elf_results` → `db/convert_elf_stage_2.csv` (the ELF P²IM and µEmu read), `p2im_fuzzing_results` → `db/p2im_stage_2.csv` (P²IM, related work), µEmu → `db/uemu_stage_2.csv`, AidFuzzer → `db/aidfuzzer_stage_2.csv` (seed-level detail: `db/{fuzzware,hoedur,multifuzz}_admission_seeds_stage_2.csv`) |
-| 3 | `firmxray_on_fuzzware_results` → `db/fuzzware_stage_3.csv` (statistics: `db/fuzzware_statistics_stage_3.csv`; replay: `db/fuzzware_replay_stage_3.csv`), `firmxray_on_fuzzware_gdma_results` → `db/gdma_stage_3.csv` (the same pipeline with `--dma`, its own stage so the two runs keep separate numbers; its replay and statistics land in `db/gdma_replay_stage_3.csv` and `db/gdma_statistics_stage_3.csv`, and the same crash view is built over the DMA table as `db/gdma_replay_crashes_stage_3.csv`), `firmxray_fuzzware_replay_crashes` → `db/fuzzware_replay_crashes_stage_3.csv` (view, one row per replayed crash), `hoedur_fuzz_results` → `db/hoedur_stage_3.csv`, `hoedur_statistics_results` → `db/hoedur_statistics_stage_3.csv`, `multifuzz_results` → `db/multifuzz_stage_3.csv` |
-| 4 | `firmrca_results` → `db/firmrca_stage_4.csv`, `firmrca_classified_results` → `db/firmrca_classified_stage_4.csv`, `firmrca_sampling` → `db/firmrca_sampling_stage_4.csv` |
-
-Per-firmware project trees can additionally be exported with:
-
-```bash
-evaluation_framework/scripts/export_results.sh --with-artifacts
-```
-
-A successful scaled-down run should produce outputs for all four pipeline stages, allowing evaluators to verify that the same configuration-recovery, emulation, fuzzing, crash-processing, and diagnosis workflow used in the full study is functional.
-
-
----
-
 # A Artifact Appendix
 
 ## A.1 What is included
@@ -484,10 +336,10 @@ recommended hardware the three one-hour runs per firmware are sized as follows:
 
 | Tool | Samples | Workers | Est. time |
 |---|---|---|---|
-| Fuzzware | 1,471 | 16 | 79 h (3.3 d) |
-| GDMA | 1,462 | 16 | 79 h (3.3 d) |
-| Hoedur | 1,485 | 24 | 56 h (2.3 d) |
-| MultiFuzz | 1,499 | 48 | 32 h (1.3 d) |
+| Fuzzware | 1,471 | 16 | 79 h (3-4 d) |
+| GDMA | 1,462 | 16 | 79 h (3-4 d) |
+| Hoedur | 1,485 | 24 | 56 h (2-4 d) |
+| MultiFuzz | 1,499 | 48 | 32 h (1-2 d) |
 
 i.e. ≈17,751 fuzzing instance-hours across the four campaigns. The canonical results show that
 1,580 of the 4,571 firmware samples (34.5%) can be successfully fuzzed by at least one evaluated
